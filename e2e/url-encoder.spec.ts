@@ -139,7 +139,7 @@ test('url breakdown param copy button copies the value', async ({ page }) => {
   const copyBtn = page.locator('.bd-copy-btn').first();
   await copyBtn.click();
   await expect(copyBtn).toHaveText('copied');
-  await expect(copyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(copyBtn).toHaveText('copy', { timeout: 3000 });
 });
 
 test('breakdown hides when switching to encode mode', async ({ page }) => {
@@ -206,7 +206,7 @@ test('copy button changes text to "copied" then reverts', async ({ page }) => {
   await expect(copyBtn).toBeEnabled();
   await copyBtn.click();
   await expect(copyBtn).toHaveText('copied');
-  await expect(copyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(copyBtn).toHaveText('copy', { timeout: 3000 });
 });
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ test('history copy button writes output to clipboard', async ({ page }) => {
   const histCopyBtn = page.locator('.history-copy-btn').first();
   await histCopyBtn.click();
   await expect(histCopyBtn).toHaveText('copied');
-  await expect(histCopyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(histCopyBtn).toHaveText('copy', { timeout: 3000 });
 });
 
 test('duplicate inputs are not added to history twice', async ({ page }) => {

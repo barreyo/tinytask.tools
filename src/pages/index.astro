@@ -52,8 +52,10 @@ const itemListSchema = {
   title="Free Online Developer Utilities"
   description="Free browser-only developer tools: UUID generator, JSON formatter, Base64 encoder, hash generator, JWT debugger, and more. No sign-ups, no tracking — everything runs in your browser."
 >
+  {/* eslint-disable astro/no-set-html-directive */}
   <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
   <script type="application/ld+json" set:html={JSON.stringify(itemListSchema)} />
+  {/* eslint-enable astro/no-set-html-directive */}
   <div class="page">
     <header class="site-header">
       <button class="search-corner-btn" id="search-corner-btn" aria-label="Search tools">

@@ -73,6 +73,7 @@ const faqSchema =
   description={tool?.metaDescription ?? tool?.description}
   image={tool ? `/og/${tool.slug}.png` : undefined}
 >
+  {/* eslint-disable astro/no-set-html-directive */}
   {webAppSchema && <script type="application/ld+json" set:html={JSON.stringify(webAppSchema)} />}
   {
     breadcrumbSchema && (
@@ -80,6 +81,7 @@ const faqSchema =
     )
   }
   {faqSchema && <script type="application/ld+json" set:html={JSON.stringify(faqSchema)} />}
+  {/* eslint-enable astro/no-set-html-directive */}
 
   <script define:vars={{ slug }}>
     navigator.sendBeacon?.('/api/hit?tool=' + slug);

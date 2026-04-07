@@ -91,9 +91,6 @@
   }
 
   function renderInline(diffLines: ReturnType<typeof computeLineDiff>): string {
-    let leftNum = 0;
-    let rightNum = 0;
-
     const rows = diffLines.map((dl) => {
       const left = dl.leftLineNum ?? '';
       const right = dl.rightLineNum ?? '';

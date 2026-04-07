@@ -172,14 +172,22 @@ test('preset buttons are rendered', async ({ page }) => {
 test('clicking "every minute" preset sets the expression and parses', async ({ page }) => {
   await page.goto(URL);
   await page.locator('.preset-btn[data-expr="* * * * *"]').click();
-  await expect(page.locator('#cron-input')).toHaveValue('* * * * *');
+  await expect(page.locator('#cron-minute')).toHaveValue('*');
+  await expect(page.locator('#cron-hour')).toHaveValue('*');
+  await expect(page.locator('#cron-dom')).toHaveValue('*');
+  await expect(page.locator('#cron-month')).toHaveValue('*');
+  await expect(page.locator('#cron-dow')).toHaveValue('*');
   await expect(page.locator('#cron-description')).toHaveText('Every minute');
 });
 
 test('clicking "hourly" preset sets the correct expression', async ({ page }) => {
   await page.goto(URL);
   await page.locator('.preset-btn[data-expr="0 * * * *"]').click();
-  await expect(page.locator('#cron-input')).toHaveValue('0 * * * *');
+  await expect(page.locator('#cron-minute')).toHaveValue('0');
+  await expect(page.locator('#cron-hour')).toHaveValue('*');
+  await expect(page.locator('#cron-dom')).toHaveValue('*');
+  await expect(page.locator('#cron-month')).toHaveValue('*');
+  await expect(page.locator('#cron-dow')).toHaveValue('*');
   await expect(page.locator('#cron-description')).not.toBeEmpty();
   await expect(page.locator('#cron-error')).toBeHidden();
 });

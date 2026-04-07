@@ -169,7 +169,6 @@ Direction is auto-detected from the input."
 
   swapBtn.addEventListener('click', () => {
     if (currentOutput) {
-      const prevInput = inputEl.value;
       inputEl.value = currentOutput;
       // Flip direction
       const current = getEffectiveDirection();
