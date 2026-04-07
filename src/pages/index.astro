@@ -12,15 +12,55 @@ const sortedTools = [...tools].sort((a, b) => {
   // Preserve original order for ties (including both at 0)
   return tools.indexOf(a) - tools.indexOf(b);
 });
+
+const SITE_URL = 'https://tinytask.tools';
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'tinytask.tools',
+  url: SITE_URL,
+  description:
+    'Free browser-only developer tools. No sign-ups, no tracking — everything runs in your browser.',
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: `${SITE_URL}/?q={search_term_string}`,
+    'query-input': 'required name=search_term_string',
+  },
+};
+
+const itemListSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'tinytask.tools — Developer Utilities',
+  description: 'A collection of free, browser-only developer utilities.',
+  url: SITE_URL,
+  itemListElement: tools
+    .filter((t) => t.implemented)
+    .map((t, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: t.name,
+      description: t.description,
+      url: `${SITE_URL}/tools/${t.slug}`,
+    })),
+};
 ---
 
-<Layout description="tinytask.tools — a collection of small utilities.">
+<Layout
+  title="Free Online Developer Utilities"
+  description="Free browser-only developer tools: UUID generator, JSON formatter, Base64 encoder, hash generator, JWT debugger, and more. No sign-ups, no tracking — everything runs in your browser."
+>
+  <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+  <script type="application/ld+json" set:html={JSON.stringify(itemListSchema)} />
   <div class="page">
     <header class="site-header">
-      <div class="site-logo" aria-label="tinytask.tools">
-        <span class="logo-tt">tt</span><span class="logo-cursor" aria-hidden="true">_</span>
-      </div>
-      <span class="site-name">tinytask.tools</span>
+      <h1 class="site-heading">
+        <div class="site-logo" aria-label="tinytask.tools">
+          <span class="logo-tt">tt</span><span class="logo-cursor" aria-hidden="true">_</span>
+        </div>
+        <span class="site-name">tinytask.tools</span>
+      </h1>
       <span class="site-tagline">small browser-only utilities</span>
     </header>
 
@@ -43,6 +83,13 @@ const sortedTools = [...tools].sort((a, b) => {
     gap: 0.25rem;
     padding: 2rem;
     border-bottom: 1px solid var(--border);
+  }
+
+  .site-heading {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
   }
 
   .site-logo {

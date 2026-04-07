@@ -81,6 +81,29 @@ body {
   }
 }
 
+/* ─── Scrollbars ──────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-dim);
+}
+
 /* ─── Interactive elements ───────────────────────────────────────────────────── */
 button,
 [role='button'],

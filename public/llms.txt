@@ -1,0 +1,28 @@
+# tinytask.tools
+
+> Free, browser-only developer utilities. No sign-ups, no tracking, no server processing — everything runs locally in your browser.
+
+## Tools
+
+- [UUID Generator](https://tinytask.tools/tools/uuid-generator): Generate v1, v4, v5, v7 UUIDs and ULIDs with history.
+- [Base64 Encoder / Decoder](https://tinytask.tools/tools/base64): Encode and decode Base64 and Base64URL strings.
+- [JSON Formatter](https://tinytask.tools/tools/json-formatter): Prettify, minify, and validate JSON with syntax highlighting.
+- [URL Encoder / Decoder](https://tinytask.tools/tools/url-encoder): Percent-encode and decode URL components and full URLs.
+- [Crontab Calculator](https://tinytask.tools/tools/crontab): Parse cron expressions into human-readable schedules and preview upcoming triggers.
+- [Hash Generator](https://tinytask.tools/tools/hash-generator): Compute MD5, SHA-1, SHA-256, SHA-384, and SHA-512 hashes using the Web Crypto API.
+- [Unix Timestamp](https://tinytask.tools/tools/timestamp): Convert between Unix epoch seconds/milliseconds and human-readable dates.
+- [List Cleaner](https://tinytask.tools/tools/list-cleaner): Deduplicate, sort, trim, and reformat newline-separated lists.
+- [Luhn Checker](https://tinytask.tools/tools/luhn-checker): Validate credit card numbers or generate a test number for a given IIN/BIN prefix.
+- [JWT Debugger](https://tinytask.tools/tools/jwt-debugger): Decode JSON Web Token header, payload, and signature without sending the token anywhere.
+- [ISO 4217 Currency Lookup](https://tinytask.tools/tools/currency-lookup): Search all ISO 4217 currency codes, symbols, numeric codes, exponents, and country flags.
+- [YAML ↔ JSON Converter](https://tinytask.tools/tools/yaml-json): Convert between YAML and JSON instantly.
+- [Diff Checker](https://tinytask.tools/tools/diff-checker): Compare two texts side-by-side or inline using the Myers diff algorithm.
+- [SVG Optimizer](https://tinytask.tools/tools/svg-optimizer): Minify and clean SVG files using SVGO — strip metadata, collapse groups, shrink path data.
+- [Image → WebP](https://tinytask.tools/tools/image-optimizer): Convert JPEG, PNG, and other images to WebP with adjustable quality and optional resizing.
+- [Dummy Text Generator](https://tinytask.tools/tools/dummy-text): Generate Lorem Ipsum and themed placeholder text (Fintech, Startup, Developer, Legal, and more).
+
+## About
+
+tinytask.tools is a collection of small, focused utilities for developers and designers. All tools run entirely in the browser — no data is ever sent to a server, no account is required, and there is no tracking.
+
+Built with [Astro](https://astro.build) and deployed on [Cloudflare Workers](https://workers.cloudflare.com).

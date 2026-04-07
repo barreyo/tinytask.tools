@@ -27,7 +27,7 @@ const {
 } = Astro.props;
 
 const pageTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME;
-const ogImage = image ?? new URL('/og-default.png', SITE_URL).href;
+const ogImage = image ? new URL(image, SITE_URL).href : new URL('/og-default.png', SITE_URL).href;
 ---
 
 <!doctype html>
