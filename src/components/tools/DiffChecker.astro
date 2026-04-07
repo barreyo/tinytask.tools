@@ -1,0 +1,557 @@
+---
+// Fully client-side
+---
+
+<div class="dc-tool">
+  <!-- Input row: two textareas side by side -->
+  <div class="dc-inputs">
+    <div class="dc-pane dc-pane--original">
+      <div class="dc-pane-header">
+        <span class="dc-pane-label">original</span>
+        <div class="dc-pane-actions">
+          <button id="dc-clear-left" class="action-btn">clear</button>
+        </div>
+      </div>
+      <div class="dc-editor-wrap">
+        <textarea
+          id="dc-original"
+          class="dc-textarea"
+          placeholder="Paste original text here…"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="Original text"></textarea>
+      </div>
+    </div>
+
+    <div class="dc-pane dc-pane--modified">
+      <div class="dc-pane-header">
+        <span class="dc-pane-label">modified</span>
+        <div class="dc-pane-actions">
+          <button id="dc-clear-right" class="action-btn">clear</button>
+        </div>
+      </div>
+      <div class="dc-editor-wrap">
+        <textarea
+          id="dc-modified"
+          class="dc-textarea"
+          placeholder="Paste modified text here…"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="Modified text"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output controls -->
+  <div class="dc-controls">
+    <div class="dc-view-toggles" role="group" aria-label="View mode">
+      <button id="dc-mode-inline" class="dc-toggle dc-toggle--active" aria-pressed="true"
+        >inline</button
+      >
+      <button id="dc-mode-side" class="dc-toggle" aria-pressed="false">side-by-side</button>
+    </div>
+    <div class="dc-right-controls">
+      <span id="dc-stats" class="dc-stats" aria-live="polite"></span>
+      <button id="dc-copy-btn" class="action-btn" disabled>copy diff</button>
+    </div>
+  </div>
+
+  <!-- Diff output -->
+  <div id="dc-output" class="dc-output" aria-live="polite">
+    <span class="dc-placeholder">diff output will appear here when you type in both panes</span>
+  </div>
+</div>
+
+<script>
+  import { computeLineDiff } from '../../utils/diffChecker';
+
+  const originalEl = document.getElementById('dc-original') as HTMLTextAreaElement;
+  const modifiedEl = document.getElementById('dc-modified') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('dc-output') as HTMLDivElement;
+  const statsEl = document.getElementById('dc-stats') as HTMLSpanElement;
+  const copyBtn = document.getElementById('dc-copy-btn') as HTMLButtonElement;
+  const clearLeftBtn = document.getElementById('dc-clear-left') as HTMLButtonElement;
+  const clearRightBtn = document.getElementById('dc-clear-right') as HTMLButtonElement;
+  const modeInlineBtn = document.getElementById('dc-mode-inline') as HTMLButtonElement;
+  const modeSideBtn = document.getElementById('dc-mode-side') as HTMLButtonElement;
+
+  let viewMode: 'inline' | 'side' = 'inline';
+  let lastDiffText = '';
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\t/g, '  ');
+  }
+
+  function renderInline(diffLines: ReturnType<typeof computeLineDiff>): string {
+    let leftNum = 0;
+    let rightNum = 0;
+
+    const rows = diffLines.map((dl) => {
+      const left = dl.leftLineNum ?? '';
+      const right = dl.rightLineNum ?? '';
+      const sign = dl.type === 'added' ? '+' : dl.type === 'removed' ? '-' : ' ';
+      const rowClass = dl.type !== 'unchanged' ? ` dc-row--${dl.type}` : '';
+      return (
+        `<div class="dc-row${rowClass}">` +
+        `<span class="dc-ln dc-ln--left">${escapeHtml(String(left))}</span>` +
+        `<span class="dc-ln dc-ln--right">${escapeHtml(String(right))}</span>` +
+        `<span class="dc-sign">${sign}</span>` +
+        `<span class="dc-lc">${escapeHtml(dl.value) || '\u00a0'}</span>` +
+        `</div>`
+      );
+    });
+
+    return `<pre class="dc-pre">${rows.join('')}</pre>`;
+  }
+
+  function renderSide(diffLines: ReturnType<typeof computeLineDiff>): string {
+    const rows = diffLines.map((dl) => {
+      const left = dl.leftLineNum ?? '';
+      const right = dl.rightLineNum ?? '';
+      const leftClass = dl.type === 'removed' ? ' dc-side-cell--removed' : '';
+      const rightClass = dl.type === 'added' ? ' dc-side-cell--added' : '';
+
+      const leftContent =
+        dl.type !== 'added'
+          ? `<span class="dc-ln">${escapeHtml(String(left))}</span><span class="dc-lc">${escapeHtml(dl.value) || '\u00a0'}</span>`
+          : `<span class="dc-ln"></span><span class="dc-lc dc-lc--empty">\u00a0</span>`;
+
+      const rightContent =
+        dl.type !== 'removed'
+          ? `<span class="dc-ln">${escapeHtml(String(right))}</span><span class="dc-lc">${escapeHtml(dl.value) || '\u00a0'}</span>`
+          : `<span class="dc-ln"></span><span class="dc-lc dc-lc--empty">\u00a0</span>`;
+
+      return (
+        `<div class="dc-side-row">` +
+        `<div class="dc-side-cell${leftClass}">${leftContent}</div>` +
+        `<div class="dc-side-cell${rightClass}">${rightContent}</div>` +
+        `</div>`
+      );
+    });
+
+    return `<div class="dc-side-table">${rows.join('')}</div>`;
+  }
+
+  function buildPlainDiff(diffLines: ReturnType<typeof computeLineDiff>): string {
+    return diffLines
+      .map((dl) => {
+        const sign = dl.type === 'added' ? '+' : dl.type === 'removed' ? '-' : ' ';
+        return `${sign} ${dl.value}`;
+      })
+      .join('\n');
+  }
+
+  function process() {
+    const original = originalEl.value;
+    const modified = modifiedEl.value;
+
+    if (!original && !modified) {
+      outputEl.innerHTML =
+        '<span class="dc-placeholder">diff output will appear here when you type in both panes</span>';
+      statsEl.textContent = '';
+      copyBtn.disabled = true;
+      lastDiffText = '';
+      return;
+    }
+
+    const diff = computeLineDiff(original, modified);
+
+    const added = diff.filter((d) => d.type === 'added').length;
+    const removed = diff.filter((d) => d.type === 'removed').length;
+
+    if (added === 0 && removed === 0 && original === modified) {
+      outputEl.innerHTML = '<div class="dc-identical">✓ texts are identical</div>';
+      statsEl.textContent = '';
+      copyBtn.disabled = true;
+      lastDiffText = '';
+      return;
+    }
+
+    outputEl.innerHTML = viewMode === 'inline' ? renderInline(diff) : renderSide(diff);
+    lastDiffText = buildPlainDiff(diff);
+    copyBtn.disabled = false;
+
+    const parts: string[] = [];
+    if (added > 0) parts.push(`+${added}`);
+    if (removed > 0) parts.push(`-${removed}`);
+    statsEl.textContent = parts.join('  ');
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function debouncedProcess() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  }
+
+  originalEl.addEventListener('input', debouncedProcess);
+  modifiedEl.addEventListener('input', debouncedProcess);
+
+  clearLeftBtn.addEventListener('click', () => {
+    originalEl.value = '';
+    process();
+    originalEl.focus();
+  });
+  clearRightBtn.addEventListener('click', () => {
+    modifiedEl.value = '';
+    process();
+    modifiedEl.focus();
+  });
+
+  modeInlineBtn.addEventListener('click', () => {
+    viewMode = 'inline';
+    modeInlineBtn.classList.add('dc-toggle--active');
+    modeInlineBtn.setAttribute('aria-pressed', 'true');
+    modeSideBtn.classList.remove('dc-toggle--active');
+    modeSideBtn.setAttribute('aria-pressed', 'false');
+    process();
+  });
+
+  modeSideBtn.addEventListener('click', () => {
+    viewMode = 'side';
+    modeSideBtn.classList.add('dc-toggle--active');
+    modeSideBtn.setAttribute('aria-pressed', 'true');
+    modeInlineBtn.classList.remove('dc-toggle--active');
+    modeInlineBtn.setAttribute('aria-pressed', 'false');
+    process();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!lastDiffText) return;
+    await navigator.clipboard.writeText(lastDiffText);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy diff';
+    }, 1200);
+  });
+</script>
+
+<style>
+  .dc-tool {
+    --dc-added-bg: rgba(80, 180, 80, 0.1);
+    --dc-added-fg: #7ec87e;
+    --dc-removed-bg: rgba(180, 80, 80, 0.1);
+    --dc-removed-fg: #c87e7e;
+    --dc-ln: #3a3a3a;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* ── Input row ── */
+  .dc-inputs {
+    display: flex;
+    gap: 1.5rem;
+    height: 280px;
+  }
+
+  .dc-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .dc-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .dc-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .dc-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .dc-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .dc-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .dc-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  /* ── Controls row ── */
+  .dc-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .dc-view-toggles {
+    display: flex;
+    gap: 0;
+  }
+
+  .dc-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .dc-toggle + .dc-toggle {
+    margin-left: -1px;
+  }
+
+  .dc-toggle:hover {
+    color: var(--fg);
+    border-color: var(--border-active);
+  }
+
+  .dc-toggle--active {
+    color: var(--fg);
+    border-color: var(--border-active);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .dc-right-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .dc-stats {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Output ── */
+  .dc-output {
+    border: 1px solid var(--border);
+    overflow: auto;
+    max-height: calc(100vh - 580px);
+    min-height: 200px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  .dc-placeholder {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+    opacity: 0.5;
+  }
+
+  .dc-identical {
+    padding: 0.75rem 1rem;
+    color: var(--dc-added-fg);
+    font-size: 0.8rem;
+  }
+
+  /* ── Inline diff ── */
+  :global(.dc-pre) {
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+  }
+
+  :global(.dc-row) {
+    display: flex;
+    min-height: 1.6em;
+  }
+
+  :global(.dc-row--added) {
+    background: var(--dc-added-bg);
+  }
+
+  :global(.dc-row--removed) {
+    background: var(--dc-removed-bg);
+  }
+
+  :global(.dc-ln) {
+    display: inline-block;
+    width: 3.5rem;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 0.5rem;
+    color: var(--dc-ln);
+    user-select: none;
+    font-size: 0.72rem;
+    line-height: 1.6;
+    border-right: 1px solid var(--border);
+  }
+
+  :global(.dc-ln--left) {
+    width: 2.8rem;
+  }
+
+  :global(.dc-ln--right) {
+    width: 2.8rem;
+  }
+
+  :global(.dc-sign) {
+    display: inline-block;
+    width: 1.4rem;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 700;
+    line-height: 1.6;
+  }
+
+  :global(.dc-row--added .dc-sign) {
+    color: var(--dc-added-fg);
+  }
+
+  :global(.dc-row--removed .dc-sign) {
+    color: var(--dc-removed-fg);
+  }
+
+  :global(.dc-lc) {
+    flex: 1;
+    padding-left: 0.5rem;
+    padding-right: 1rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.6;
+  }
+
+  :global(.dc-row--added .dc-lc) {
+    color: var(--dc-added-fg);
+  }
+
+  :global(.dc-row--removed .dc-lc) {
+    color: var(--dc-removed-fg);
+  }
+
+  /* ── Side-by-side diff ── */
+  :global(.dc-side-table) {
+    display: flex;
+    flex-direction: column;
+    min-width: 100%;
+  }
+
+  :global(.dc-side-row) {
+    display: flex;
+    min-height: 1.6em;
+    border-bottom: 1px solid transparent;
+  }
+
+  :global(.dc-side-cell) {
+    flex: 1;
+    display: flex;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  :global(.dc-side-cell:last-child) {
+    border-right: none;
+  }
+
+  :global(.dc-side-cell--added) {
+    background: var(--dc-added-bg);
+  }
+
+  :global(.dc-side-cell--removed) {
+    background: var(--dc-removed-bg);
+  }
+
+  :global(.dc-side-cell--added .dc-lc) {
+    color: var(--dc-added-fg);
+  }
+
+  :global(.dc-side-cell--removed .dc-lc) {
+    color: var(--dc-removed-fg);
+  }
+
+  :global(.dc-lc--empty) {
+    opacity: 0.2;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  @media (max-width: 640px) {
+    .dc-inputs {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .dc-pane {
+      height: 200px;
+    }
+
+    .dc-output {
+      max-height: 400px;
+    }
+  }
+</style>

@@ -1,0 +1,437 @@
+---
+// Fully client-side
+---
+
+<div class="lu-tool">
+  <!-- Validate section -->
+  <section class="lu-section">
+    <div class="lu-section-header">
+      <span class="lu-section-label">validate number</span>
+    </div>
+    <div class="lu-section-body">
+      <div class="lu-input-row">
+        <input
+          id="lu-validate-input"
+          class="lu-input"
+          type="text"
+          inputmode="numeric"
+          placeholder="4111 1111 1111 1111"
+          spellcheck="false"
+          autocomplete="off"
+          maxlength="23"
+          aria-label="Card number to validate"
+        />
+        <div id="lu-badge" class="lu-badge lu-badge--empty" aria-live="polite">—</div>
+      </div>
+
+      <div id="lu-breakdown" class="lu-breakdown" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- Generate section -->
+  <section class="lu-section">
+    <div class="lu-section-header">
+      <span class="lu-section-label">generate test number</span>
+    </div>
+    <div class="lu-section-body">
+      <div class="lu-gen-row">
+        <div class="lu-field">
+          <label class="lu-label" for="lu-iin">IIN / BIN prefix</label>
+          <input
+            id="lu-iin"
+            class="lu-input"
+            type="text"
+            inputmode="numeric"
+            placeholder="4 (Visa), 51 (MC)…"
+            maxlength="10"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="lu-field">
+          <label class="lu-label" for="lu-length">total length</label>
+          <select id="lu-length" class="lu-select">
+            <option value="13">13 digits</option>
+            <option value="14">14 digits</option>
+            <option value="15">15 digits</option>
+            <option value="16" selected>16 digits</option>
+            <option value="17">17 digits</option>
+            <option value="18">18 digits</option>
+            <option value="19">19 digits</option>
+          </select>
+        </div>
+        <button id="lu-gen-btn" class="action-btn lu-gen-btn">generate</button>
+      </div>
+
+      <div id="lu-gen-output" class="lu-gen-output" aria-live="polite"></div>
+
+      <p class="lu-note">
+        Generated numbers are mathematically valid but are not real card numbers and cannot be used
+        for transactions.
+      </p>
+    </div>
+  </section>
+</div>
+
+<script>
+  import { validateLuhn, luhnBreakdown, generateTestNumber } from '../../lib/luhn';
+
+  // ── Validate ─────────────────────────────────────────────────────────────────
+  const validateInput = document.getElementById('lu-validate-input') as HTMLInputElement;
+  const badge = document.getElementById('lu-badge') as HTMLDivElement;
+  const breakdownEl = document.getElementById('lu-breakdown') as HTMLDivElement;
+
+  function formatCardNumber(value: string): string {
+    const digits = value.replace(/\D/g, '');
+    return digits.match(/.{1,4}/g)?.join(' ') ?? digits;
+  }
+
+  validateInput.addEventListener('input', () => {
+    const raw = validateInput.value.replace(/\D/g, '');
+    validateInput.value = formatCardNumber(raw);
+
+    if (raw.length < 2) {
+      badge.textContent = '—';
+      badge.className = 'lu-badge lu-badge--empty';
+      breakdownEl.innerHTML = '';
+      return;
+    }
+
+    const valid = validateLuhn(raw);
+    badge.textContent = valid ? 'valid' : 'invalid';
+    badge.className = `lu-badge ${valid ? 'lu-badge--valid' : 'lu-badge--invalid'}`;
+
+    renderBreakdown(raw);
+  });
+
+  function renderBreakdown(digits: string) {
+    const steps = luhnBreakdown(digits);
+    const sum = steps.reduce((acc, s) => acc + s.value, 0);
+    const valid = sum % 10 === 0;
+
+    const cells = steps
+      .map(
+        (s) =>
+          `<div class="lu-bd-cell${s.doubled ? ' lu-bd-cell--doubled' : ''}">
+            <span class="lu-bd-orig">${s.original}</span>
+            ${s.doubled ? `<span class="lu-bd-arrow">×2=${s.value > 9 ? `${s.original * 2}−9` : s.original * 2}→${s.value}</span>` : ''}
+            <span class="lu-bd-val">${s.value}</span>
+          </div>`,
+      )
+      .join('');
+
+    breakdownEl.innerHTML = `
+      <div class="lu-bd-grid">${cells}</div>
+      <div class="lu-bd-sum">
+        sum = ${sum} → ${sum} mod 10 = <strong class="${valid ? 'lu-sum-ok' : 'lu-sum-fail'}">${sum % 10}</strong>
+        ${valid ? '<span class="lu-sum-note">✓ passes</span>' : '<span class="lu-sum-note lu-sum-note--fail">✗ fails</span>'}
+      </div>
+    `;
+  }
+
+  // ── Generate ─────────────────────────────────────────────────────────────────
+  const iinInput = document.getElementById('lu-iin') as HTMLInputElement;
+  const lengthSelect = document.getElementById('lu-length') as HTMLSelectElement;
+  const genBtn = document.getElementById('lu-gen-btn') as HTMLButtonElement;
+  const genOutput = document.getElementById('lu-gen-output') as HTMLDivElement;
+
+  iinInput.addEventListener('input', () => {
+    iinInput.value = iinInput.value.replace(/\D/g, '');
+  });
+
+  genBtn.addEventListener('click', () => {
+    const iin = iinInput.value.replace(/\D/g, '');
+    const length = parseInt(lengthSelect.value, 10);
+
+    if (!iin) {
+      genOutput.innerHTML = '<span class="lu-gen-error">enter an IIN/BIN prefix first</span>';
+      return;
+    }
+
+    if (iin.length >= length) {
+      genOutput.innerHTML =
+        '<span class="lu-gen-error">prefix is longer than the desired total length</span>';
+      return;
+    }
+
+    const number = generateTestNumber(iin, length);
+    const formatted = number.match(/.{1,4}/g)?.join(' ') ?? number;
+
+    genOutput.innerHTML = `
+      <div class="lu-gen-result">
+        <span class="lu-gen-number">${formatted}</span>
+        <button class="action-btn lu-copy-gen" data-value="${number}">copy</button>
+      </div>
+    `;
+
+    genOutput.querySelector('.lu-copy-gen')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      await navigator.clipboard.writeText(btn.dataset.value ?? '');
+      btn.textContent = 'copied';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+      }, 1200);
+    });
+  });
+</script>
+
+<style>
+  .lu-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 720px;
+  }
+
+  .lu-section {
+    border: 1px solid var(--border);
+  }
+
+  .lu-section-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lu-section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .lu-section-body {
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .lu-input-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .lu-input {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    letter-spacing: 0.05em;
+    transition: border-color 0.1s;
+  }
+
+  .lu-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .lu-input::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+    font-size: 0.8rem;
+  }
+
+  .lu-badge {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .lu-badge--empty {
+    color: var(--fg-dim);
+  }
+
+  .lu-badge--valid {
+    border-color: #3a7a3a;
+    color: #7ec87e;
+    background: rgba(80, 180, 80, 0.08);
+  }
+
+  .lu-badge--invalid {
+    border-color: #7a3a3a;
+    color: #c87e7e;
+    background: rgba(180, 80, 80, 0.08);
+  }
+
+  /* ── Breakdown ── */
+  .lu-breakdown {
+    font-size: 0.75rem;
+  }
+
+  :global(.lu-bd-grid) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+  }
+
+  :global(.lu-bd-cell) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid var(--border);
+    padding: 0.25rem 0.4rem;
+    min-width: 2.2rem;
+    gap: 0.1rem;
+  }
+
+  :global(.lu-bd-cell--doubled) {
+    border-color: #4a5a7a;
+    background: rgba(100, 130, 200, 0.07);
+  }
+
+  :global(.lu-bd-orig) {
+    color: var(--fg-dim);
+    font-size: 0.7rem;
+  }
+
+  :global(.lu-bd-arrow) {
+    font-size: 0.6rem;
+    color: #7aabcc;
+    white-space: nowrap;
+  }
+
+  :global(.lu-bd-val) {
+    font-size: 0.85rem;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  :global(.lu-bd-sum) {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  :global(.lu-sum-ok) {
+    color: #7ec87e;
+  }
+
+  :global(.lu-sum-fail) {
+    color: #c87e7e;
+  }
+
+  :global(.lu-sum-note) {
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: #7ec87e;
+  }
+
+  :global(.lu-sum-note--fail) {
+    color: #c87e7e;
+  }
+
+  /* ── Generate ── */
+  .lu-gen-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .lu-gen-row .lu-input {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.6rem;
+    height: 2.25rem;
+    box-sizing: border-box;
+  }
+
+  .lu-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .lu-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .lu-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.6rem;
+    height: 2.25rem;
+    outline: none;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .lu-select:focus {
+    border-color: var(--border-active);
+  }
+
+  .lu-gen-btn {
+    align-self: flex-end;
+  }
+
+  :global(.lu-gen-output) {
+    min-height: 2.5rem;
+  }
+
+  :global(.lu-gen-result) {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  :global(.lu-gen-number) {
+    font-size: 1.1rem;
+    letter-spacing: 0.1em;
+    color: var(--fg);
+  }
+
+  :global(.lu-gen-error) {
+    color: #c87e7e;
+    font-size: 0.75rem;
+  }
+
+  .lu-note {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+</style>

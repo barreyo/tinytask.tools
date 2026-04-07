@@ -1,13 +1,28 @@
 {
   "name": "tinytask",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-04-07",
   "workers_dev": false,
   "routes": [
-    { "pattern": "tinytask.tools/*", "zone_name": "tinytask.tools" },
-    { "pattern": "www.tinytask.tools/*", "zone_name": "tinytask.tools" },
+    {
+      "pattern": "tinytask.tools/*",
+      "zone_name": "tinytask.tools",
+    },
+    {
+      "pattern": "www.tinytask.tools/*",
+      "zone_name": "tinytask.tools",
+    },
   ],
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page",
+    "binding": "ASSETS",
+    // Set to "none" so /api/hit reaches the Worker instead of being intercepted as a 404
+    "not_found_handling": "none",
   },
+  "kv_namespaces": [
+    {
+      "binding": "HITS",
+      "id": "99cf4aa06bf7497da5c9b523456d7a0f",
+    },
+  ],
 }

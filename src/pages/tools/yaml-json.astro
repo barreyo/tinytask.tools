@@ -1,0 +1,15 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import YamlJson from '../../components/tools/YamlJson.astro';
+---
+
+<ToolLayout slug="yaml-json">
+  <YamlJson />
+</ToolLayout>
+
+<style is:global>
+  body:has(#yj-input) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

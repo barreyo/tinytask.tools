@@ -1,0 +1,580 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="img-tool">
+  <!-- Upload zone -->
+  <div id="upload-zone" class="upload-zone" role="button" tabindex="0" aria-label="Upload image">
+    <input
+      id="img-file-input"
+      type="file"
+      accept="image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/webp,image/*"
+      hidden
+    />
+    <div class="upload-prompt">
+      <span class="upload-icon">↑</span>
+      <span class="upload-title">drop an image or click to upload</span>
+      <span class="upload-sub">jpeg · png · gif · bmp · tiff · webp</span>
+    </div>
+  </div>
+
+  <!-- Settings (shown after file selected) -->
+  <div id="settings-panel" class="settings-panel" hidden>
+    <div class="settings-header">
+      <span class="section-label">settings</span>
+      <span id="file-info" class="file-info"></span>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <label for="quality-slider" class="setting-label">quality</label>
+        <div class="setting-control">
+          <input
+            id="quality-slider"
+            type="range"
+            min="1"
+            max="100"
+            value="80"
+            class="quality-slider"
+          />
+          <span id="quality-value" class="setting-value">80</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="max-dim-select" class="setting-label">max dimension</label>
+        <div class="setting-control">
+          <select id="max-dim-select" class="setting-select"></select>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button id="convert-btn" class="action-btn primary">convert to webp</button>
+      <button id="change-file-btn" class="action-btn">change file</button>
+    </div>
+  </div>
+
+  <!-- Result (shown after conversion) -->
+  <div id="result-panel" class="result-panel" hidden>
+    <div class="result-header">
+      <span class="section-label">result</span>
+      <div class="result-actions">
+        <button id="download-btn" class="action-btn primary">download .webp</button>
+        <button id="re-convert-btn" class="action-btn">reconvert</button>
+        <button id="new-file-btn" class="action-btn">new file</button>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar" class="stats-bar"></div>
+
+    <!-- Side-by-side preview -->
+    <div class="preview-grid">
+      <div class="preview-col">
+        <div class="preview-label-row">
+          <span class="section-label">original</span>
+          <span id="orig-info" class="preview-info"></span>
+        </div>
+        <div class="preview-frame">
+          <img id="orig-preview" class="preview-img" alt="Original" />
+        </div>
+      </div>
+      <div class="preview-col">
+        <div class="preview-label-row">
+          <span class="section-label">webp</span>
+          <span id="opt-info" class="preview-info"></span>
+        </div>
+        <div class="preview-frame">
+          <img id="opt-preview" class="preview-img" alt="Optimized WebP" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <p id="img-error" class="img-error" hidden></p>
+</div>
+
+<script>
+  import { optimizeImage, formatBytes, MAX_DIMENSION_OPTIONS } from '../../lib/image-optimizer';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const uploadZone = document.getElementById('upload-zone') as HTMLDivElement;
+  const fileInput = document.getElementById('img-file-input') as HTMLInputElement;
+  const settingsPanel = document.getElementById('settings-panel') as HTMLDivElement;
+  const fileInfoEl = document.getElementById('file-info') as HTMLSpanElement;
+  const qualitySlider = document.getElementById('quality-slider') as HTMLInputElement;
+  const qualityValue = document.getElementById('quality-value') as HTMLSpanElement;
+  const maxDimSelect = document.getElementById('max-dim-select') as HTMLSelectElement;
+  const convertBtn = document.getElementById('convert-btn') as HTMLButtonElement;
+  const changeFileBtn = document.getElementById('change-file-btn') as HTMLButtonElement;
+  const resultPanel = document.getElementById('result-panel') as HTMLDivElement;
+  const statsBar = document.getElementById('stats-bar') as HTMLDivElement;
+  const origPreview = document.getElementById('orig-preview') as HTMLImageElement;
+  const optPreview = document.getElementById('opt-preview') as HTMLImageElement;
+  const origInfo = document.getElementById('orig-info') as HTMLSpanElement;
+  const optInfo = document.getElementById('opt-info') as HTMLSpanElement;
+  const downloadBtn = document.getElementById('download-btn') as HTMLButtonElement;
+  const reConvertBtn = document.getElementById('re-convert-btn') as HTMLButtonElement;
+  const newFileBtn = document.getElementById('new-file-btn') as HTMLButtonElement;
+  const errorEl = document.getElementById('img-error') as HTMLParagraphElement;
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let currentFile: File | null = null;
+  let lastBlob: Blob | null = null;
+  let lastBlobUrl: string | null = null;
+
+  // ── Init max-dim select ───────────────────────────────────────────────────────
+  MAX_DIMENSION_OPTIONS.forEach((opt) => {
+    const el = document.createElement('option');
+    el.value = opt.value === null ? 'null' : String(opt.value);
+    el.textContent = opt.label;
+    maxDimSelect.appendChild(el);
+  });
+
+  // ── Quality slider ────────────────────────────────────────────────────────────
+  qualitySlider.addEventListener('input', () => {
+    qualityValue.textContent = qualitySlider.value;
+  });
+
+  // ── File selection ────────────────────────────────────────────────────────────
+  function showSettings(file: File): void {
+    currentFile = file;
+    uploadZone.hidden = true;
+    resultPanel.hidden = true;
+    errorEl.hidden = true;
+    settingsPanel.hidden = false;
+    fileInfoEl.textContent = `${file.name} · ${formatBytes(file.size)}`;
+  }
+
+  function showUpload(): void {
+    uploadZone.hidden = false;
+    settingsPanel.hidden = true;
+    resultPanel.hidden = true;
+    errorEl.hidden = true;
+    currentFile = null;
+    if (lastBlobUrl) {
+      URL.revokeObjectURL(lastBlobUrl);
+      lastBlobUrl = null;
+    }
+    lastBlob = null;
+    fileInput.value = '';
+  }
+
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) showSettings(file);
+  });
+
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('drag-over');
+  });
+
+  uploadZone.addEventListener('dragleave', (e) => {
+    if (!uploadZone.contains(e.relatedTarget as Node)) {
+      uploadZone.classList.remove('drag-over');
+    }
+  });
+
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer?.files[0];
+    if (file) showSettings(file);
+  });
+
+  changeFileBtn.addEventListener('click', showUpload);
+  newFileBtn.addEventListener('click', showUpload);
+
+  // ── Convert ───────────────────────────────────────────────────────────────────
+  async function convert(): Promise<void> {
+    if (!currentFile) return;
+
+    convertBtn.textContent = 'converting…';
+    convertBtn.disabled = true;
+    errorEl.hidden = true;
+
+    try {
+      const quality = parseInt(qualitySlider.value, 10) / 100;
+      const rawDim = maxDimSelect.value;
+      const maxDimension = rawDim === 'null' ? null : parseInt(rawDim, 10);
+
+      const result = await optimizeImage(currentFile, { quality, maxDimension });
+
+      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+      lastBlob = result.blob;
+      lastBlobUrl = URL.createObjectURL(result.blob);
+
+      // Original preview
+      const origUrl = URL.createObjectURL(currentFile);
+      origPreview.src = origUrl;
+      origPreview.onload = () => URL.revokeObjectURL(origUrl);
+      origInfo.textContent = `${formatBytes(result.originalSize)} · ${result.originalWidth}×${result.originalHeight}`;
+
+      // Optimized preview
+      optPreview.src = lastBlobUrl;
+      optInfo.textContent = `${formatBytes(result.optimizedSize)} · ${result.outputWidth}×${result.outputHeight}`;
+
+      // Stats bar
+      const sign = result.savings >= 0 ? '-' : '+';
+      const pct = Math.abs(result.savingsPercent).toFixed(1);
+      statsBar.innerHTML = `
+        <span class="stat">${formatBytes(result.originalSize)} <span class="stat-label">original</span></span>
+        <span class="stat-arrow">→</span>
+        <span class="stat">${formatBytes(result.optimizedSize)} <span class="stat-label">webp</span></span>
+        <span class="stat-savings ${result.savings >= 0 ? 'savings-pos' : 'savings-neg'}">${sign}${formatBytes(Math.abs(result.savings))} (${sign}${pct}%)</span>
+      `;
+
+      settingsPanel.hidden = true;
+      resultPanel.hidden = false;
+    } catch (err) {
+      errorEl.textContent = err instanceof Error ? err.message : 'Conversion failed.';
+      errorEl.hidden = false;
+    } finally {
+      convertBtn.textContent = 'convert to webp';
+      convertBtn.disabled = false;
+    }
+  }
+
+  convertBtn.addEventListener('click', convert);
+
+  reConvertBtn.addEventListener('click', () => {
+    resultPanel.hidden = true;
+    settingsPanel.hidden = false;
+  });
+
+  // ── Download ──────────────────────────────────────────────────────────────────
+  downloadBtn.addEventListener('click', () => {
+    if (!lastBlob || !currentFile) return;
+    const baseName = currentFile.name.replace(/\.[^.]+$/, '');
+    const url = URL.createObjectURL(lastBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}.webp`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  .img-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Section labels ──────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* ── Upload zone ─────────────────────────────────────────────────────────────── */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    cursor: pointer;
+    transition: border-color 0.1s;
+  }
+
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: var(--border-active);
+  }
+
+  .upload-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .upload-icon {
+    font-size: 1.5rem;
+    color: var(--fg-dim);
+  }
+
+  .upload-title {
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+
+  .upload-sub {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    opacity: 0.6;
+  }
+
+  /* ── Settings panel ──────────────────────────────────────────────────────────── */
+  .settings-panel {
+    border: 1px solid var(--border);
+  }
+
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .file-info {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .settings-body {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .setting-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    width: 8rem;
+    flex-shrink: 0;
+  }
+
+  .setting-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+  }
+
+  .quality-slider {
+    flex: 1;
+    accent-color: var(--fg);
+    max-width: 220px;
+  }
+
+  .setting-value {
+    font-size: 0.8rem;
+    color: var(--fg);
+    width: 2rem;
+    text-align: right;
+  }
+
+  .setting-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .settings-footer {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Result panel ────────────────────────────────────────────────────────────── */
+  .result-panel {
+    border: 1px solid var(--border);
+  }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .result-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Stats bar ───────────────────────────────────────────────────────────────── */
+  .stats-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  :global(.stat) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    color: var(--fg);
+  }
+
+  :global(.stat-label) {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  :global(.stat-arrow) {
+    color: var(--fg-dim);
+  }
+
+  :global(.stat-savings) {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+  }
+
+  :global(.savings-pos) {
+    color: #5cb85c;
+  }
+
+  :global(.savings-neg) {
+    color: #e05c5c;
+  }
+
+  /* ── Preview grid ────────────────────────────────────────────────────────────── */
+  .preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .preview-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-col + .preview-col {
+    border-left: 1px solid var(--border);
+  }
+
+  .preview-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .preview-info {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .preview-frame {
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    background: repeating-conic-gradient(rgba(255, 255, 255, 0.03) 0% 25%, transparent 0% 50%) 0 0 /
+      16px 16px;
+  }
+
+  .preview-img {
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* ── Error ───────────────────────────────────────────────────────────────────── */
+  .img-error {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: #e05c5c;
+    border: 1px solid var(--border);
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .preview-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .preview-col + .preview-col {
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .setting-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .setting-label {
+      width: auto;
+    }
+  }
+</style>

@@ -1,0 +1,500 @@
+---
+// Fully client-side — token never leaves the browser
+---
+
+<div class="jwt-tool">
+  <!-- Security notice -->
+  <div class="jwt-notice" role="note">
+    <span class="jwt-notice-icon">⚑</span>
+    This tool decodes tokens entirely in your browser. Your token is never sent to any server.
+  </div>
+
+  <!-- Token input -->
+  <div class="jwt-input-section">
+    <div class="jwt-pane-header">
+      <span class="jwt-pane-label">encoded token</span>
+      <div class="jwt-pane-actions">
+        <button id="jwt-clear-btn" class="action-btn">clear</button>
+      </div>
+    </div>
+    <div class="jwt-token-wrap">
+      <textarea
+        id="jwt-input"
+        class="jwt-textarea"
+        placeholder="Paste a JWT here…
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.…"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        rows="4"
+        aria-label="JWT token input"></textarea>
+    </div>
+    <!-- Color-coded segments preview -->
+    <div id="jwt-segments" class="jwt-segments" aria-hidden="true"></div>
+  </div>
+
+  <!-- Decoded output: header + payload side by side -->
+  <div class="jwt-decoded">
+    <!-- Header pane -->
+    <div class="jwt-pane jwt-pane--header">
+      <div class="jwt-pane-header">
+        <span class="jwt-pane-label jwt-label--header">header</span>
+        <div class="jwt-pane-actions">
+          <button id="jwt-copy-header" class="action-btn" disabled>copy</button>
+        </div>
+      </div>
+      <div id="jwt-header-out" class="jwt-out" aria-live="polite">
+        <span class="jwt-placeholder">header will appear here</span>
+      </div>
+    </div>
+
+    <!-- Payload pane -->
+    <div class="jwt-pane jwt-pane--payload">
+      <div class="jwt-pane-header">
+        <span class="jwt-pane-label jwt-label--payload">payload</span>
+        <div class="jwt-pane-actions">
+          <button id="jwt-copy-payload" class="action-btn" disabled>copy</button>
+        </div>
+      </div>
+      <div id="jwt-payload-out" class="jwt-out" aria-live="polite">
+        <span class="jwt-placeholder">payload will appear here</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signature section -->
+  <div class="jwt-sig-section">
+    <div class="jwt-pane-header">
+      <span class="jwt-pane-label jwt-label--sig">signature</span>
+    </div>
+    <div id="jwt-sig-out" class="jwt-sig-body">
+      <span class="jwt-placeholder">signature (raw, not verified) will appear here</span>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="jwt-error" class="jwt-error" role="alert" aria-live="assertive"></div>
+</div>
+
+<script>
+  import { decodeJwt, formatUnixTime } from '../../lib/jwt';
+
+  const inputEl = document.getElementById('jwt-input') as HTMLTextAreaElement;
+  const segmentsEl = document.getElementById('jwt-segments') as HTMLDivElement;
+  const headerOut = document.getElementById('jwt-header-out') as HTMLDivElement;
+  const payloadOut = document.getElementById('jwt-payload-out') as HTMLDivElement;
+  const sigOut = document.getElementById('jwt-sig-out') as HTMLDivElement;
+  const errorEl = document.getElementById('jwt-error') as HTMLDivElement;
+  const copyHeaderBtn = document.getElementById('jwt-copy-header') as HTMLButtonElement;
+  const copyPayloadBtn = document.getElementById('jwt-copy-payload') as HTMLButtonElement;
+  const clearBtn = document.getElementById('jwt-clear-btn') as HTMLButtonElement;
+
+  let decodedHeader = '';
+  let decodedPayload = '';
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function highlightJson(json: string): string {
+    return json.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+      (match) => {
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) return `<span class="jwt-key">${escapeHtml(match)}</span>`;
+          return `<span class="jwt-string">${escapeHtml(match)}</span>`;
+        }
+        if (/true|false/.test(match)) return `<span class="jwt-bool">${match}</span>`;
+        if (/null/.test(match)) return `<span class="jwt-null">${match}</span>`;
+        return `<span class="jwt-number">${match}</span>`;
+      },
+    );
+  }
+
+  function renderJson(obj: Record<string, unknown>): string {
+    const json = JSON.stringify(obj, null, 2);
+    return `<pre class="jwt-pre">${highlightJson(escapeHtml(json)).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</pre>`;
+  }
+
+  function renderPayloadWithClaims(payload: Record<string, unknown>): string {
+    const json = JSON.stringify(payload, null, 2);
+    const highlighted = highlightJson(escapeHtml(json))
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+
+    const knownTimeClaims = ['iat', 'exp', 'nbf', 'auth_time', 'updated_at'];
+    const hints: string[] = [];
+
+    for (const claim of knownTimeClaims) {
+      if (claim in payload) {
+        const ts = payload[claim];
+        const formatted = formatUnixTime(ts);
+        if (formatted) {
+          hints.push(
+            `<div class="jwt-claim-hint"><span class="jwt-claim-key">${claim}</span> → ${escapeHtml(formatted)}</div>`,
+          );
+        }
+      }
+    }
+
+    const hintsHtml =
+      hints.length > 0 ? `<div class="jwt-claims-hints">${hints.join('')}</div>` : '';
+
+    return `<pre class="jwt-pre">${highlighted}</pre>${hintsHtml}`;
+  }
+
+  function decode() {
+    const token = inputEl.value.trim();
+
+    if (!token) {
+      reset();
+      return;
+    }
+
+    errorEl.textContent = '';
+
+    // Update color-coded segments
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      segmentsEl.innerHTML = `<span class="jwt-seg jwt-seg--h">${escapeHtml(parts[0])}</span><span class="jwt-seg-dot">.</span><span class="jwt-seg jwt-seg--p">${escapeHtml(parts[1])}</span><span class="jwt-seg-dot">.</span><span class="jwt-seg jwt-seg--s">${escapeHtml(parts[2])}</span>`;
+    } else {
+      segmentsEl.innerHTML = `<span class="jwt-seg jwt-seg--error">${escapeHtml(token)}</span>`;
+    }
+
+    try {
+      const { header, payload, signatureB64 } = decodeJwt(token);
+
+      decodedHeader = JSON.stringify(header, null, 2);
+      decodedPayload = JSON.stringify(payload, null, 2);
+
+      headerOut.innerHTML = renderJson(header);
+      payloadOut.innerHTML = renderPayloadWithClaims(payload);
+      sigOut.innerHTML = `<code class="jwt-sig-value jwt-label--sig">${escapeHtml(signatureB64)}</code><p class="jwt-sig-note">Signature is shown raw (base64url). This tool does not verify signatures.</p>`;
+
+      copyHeaderBtn.disabled = false;
+      copyPayloadBtn.disabled = false;
+    } catch (err) {
+      decodedHeader = '';
+      decodedPayload = '';
+      headerOut.innerHTML = '<span class="jwt-placeholder">header will appear here</span>';
+      payloadOut.innerHTML = '<span class="jwt-placeholder">payload will appear here</span>';
+      sigOut.innerHTML =
+        '<span class="jwt-placeholder">signature (raw, not verified) will appear here</span>';
+      copyHeaderBtn.disabled = true;
+      copyPayloadBtn.disabled = true;
+      errorEl.textContent = (err as Error).message;
+    }
+  }
+
+  function reset() {
+    segmentsEl.innerHTML = '';
+    headerOut.innerHTML = '<span class="jwt-placeholder">header will appear here</span>';
+    payloadOut.innerHTML = '<span class="jwt-placeholder">payload will appear here</span>';
+    sigOut.innerHTML =
+      '<span class="jwt-placeholder">signature (raw, not verified) will appear here</span>';
+    errorEl.textContent = '';
+    copyHeaderBtn.disabled = true;
+    copyPayloadBtn.disabled = true;
+    decodedHeader = '';
+    decodedPayload = '';
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(decode, 150);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    reset();
+    inputEl.focus();
+  });
+
+  copyHeaderBtn.addEventListener('click', async () => {
+    if (!decodedHeader) return;
+    await navigator.clipboard.writeText(decodedHeader);
+    copyHeaderBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyHeaderBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  copyPayloadBtn.addEventListener('click', async () => {
+    if (!decodedPayload) return;
+    await navigator.clipboard.writeText(decodedPayload);
+    copyPayloadBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyPayloadBtn.textContent = 'copy';
+    }, 1200);
+  });
+</script>
+
+<style>
+  .jwt-tool {
+    --jwt-header: #d4a96a;
+    --jwt-payload: #7ec8a0;
+    --jwt-sig: #c8b4f0;
+    --jwt-key: #c8b4f0;
+    --jwt-string: #7ec8a0;
+    --jwt-number: #d4a96a;
+    --jwt-bool: #7aabcc;
+    --jwt-null: #666;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .jwt-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  .jwt-notice-icon {
+    flex-shrink: 0;
+    color: var(--fg-dim);
+  }
+
+  /* ── Input section ── */
+  .jwt-input-section {
+    border: 1px solid var(--border);
+  }
+
+  .jwt-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .jwt-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .jwt-label--header {
+    color: var(--jwt-header);
+  }
+  .jwt-label--payload {
+    color: var(--jwt-payload);
+  }
+  .jwt-label--sig {
+    color: var(--jwt-sig);
+  }
+
+  .jwt-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .jwt-token-wrap {
+    padding: 0.5rem;
+  }
+
+  .jwt-textarea {
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.5rem;
+    resize: vertical;
+    outline: none;
+    white-space: pre-wrap;
+    word-break: break-all;
+    tab-size: 2;
+    min-height: 90px;
+  }
+
+  .jwt-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  /* Color-coded segment preview */
+  .jwt-segments {
+    padding: 0.5rem 0.75rem 0.75rem;
+    font-size: 0.72rem;
+    word-break: break-all;
+    line-height: 1.7;
+    border-top: 1px solid var(--border);
+    min-height: 1.5rem;
+  }
+
+  :global(.jwt-seg) {
+    font-weight: 600;
+  }
+  :global(.jwt-seg--h) {
+    color: var(--jwt-header);
+  }
+  :global(.jwt-seg--p) {
+    color: var(--jwt-payload);
+  }
+  :global(.jwt-seg--s) {
+    color: var(--jwt-sig);
+  }
+  :global(.jwt-seg--error) {
+    color: #c87e7e;
+  }
+  :global(.jwt-seg-dot) {
+    color: var(--fg-dim);
+    margin: 0 1px;
+  }
+
+  /* ── Decoded output ── */
+  .jwt-decoded {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .jwt-pane {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .jwt-pane--header .jwt-pane-header {
+    border-bottom-color: rgba(212, 169, 106, 0.3);
+  }
+
+  .jwt-pane--payload .jwt-pane-header {
+    border-bottom-color: rgba(126, 200, 160, 0.3);
+  }
+
+  .jwt-out {
+    flex: 1;
+    overflow: auto;
+    min-height: 120px;
+    max-height: 400px;
+  }
+
+  .jwt-placeholder {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+
+  :global(.jwt-pre) {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  :global(.jwt-key) {
+    color: var(--jwt-key);
+    font-weight: 600;
+  }
+  :global(.jwt-string) {
+    color: var(--jwt-string);
+  }
+  :global(.jwt-number) {
+    color: var(--jwt-number);
+  }
+  :global(.jwt-bool) {
+    color: var(--jwt-bool);
+  }
+  :global(.jwt-null) {
+    color: var(--jwt-null);
+  }
+
+  :global(.jwt-claims-hints) {
+    border-top: 1px solid var(--border);
+    padding: 0.5rem 1rem;
+  }
+
+  :global(.jwt-claim-hint) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    line-height: 1.6;
+  }
+
+  :global(.jwt-claim-key) {
+    color: var(--jwt-key);
+    font-weight: 600;
+  }
+
+  /* ── Signature section ── */
+  .jwt-sig-section {
+    border: 1px solid var(--border);
+  }
+
+  .jwt-sig-body {
+    padding: 0.75rem 1rem;
+  }
+
+  :global(.jwt-sig-value) {
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--jwt-sig);
+    word-break: break-all;
+    line-height: 1.6;
+  }
+
+  :global(.jwt-sig-note) {
+    margin: 0.5rem 0 0;
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+  }
+
+  /* ── Error ── */
+  .jwt-error {
+    font-size: 0.75rem;
+    color: #c87e7e;
+    min-height: 1rem;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  @media (max-width: 640px) {
+    .jwt-decoded {
+      flex-direction: column;
+    }
+  }
+</style>

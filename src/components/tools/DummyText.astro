@@ -1,0 +1,439 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="dt-tool">
+  <!-- Theme selector -->
+  <div class="theme-selector" role="group" aria-label="Theme">
+    <span class="section-label">theme</span>
+    <div id="theme-btns" class="theme-btns"></div>
+  </div>
+
+  <!-- Format + count row -->
+  <div class="options-row">
+    <div class="format-selector" role="group" aria-label="Format">
+      <span class="section-label">format</span>
+      <div id="format-btns" class="format-btns"></div>
+    </div>
+    <div class="count-selector">
+      <label for="count-input" class="section-label">amount</label>
+      <div class="count-control">
+        <button id="count-dec" class="count-btn" aria-label="Decrease">−</button>
+        <input
+          id="count-input"
+          type="number"
+          class="count-input"
+          value="3"
+          min="1"
+          max="20"
+          aria-label="Amount"
+        />
+        <button id="count-inc" class="count-btn" aria-label="Increase">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button id="generate-btn" class="action-btn primary">generate</button>
+    <button id="regenerate-btn" class="action-btn">regenerate</button>
+    <button id="copy-btn" class="action-btn">copy</button>
+  </div>
+
+  <!-- Output -->
+  <div class="output-section">
+    <div class="output-header">
+      <span class="section-label">output</span>
+      <span id="char-count" class="char-count"></span>
+    </div>
+    <div id="dt-output" class="dt-output" aria-live="polite" aria-label="Generated text"></div>
+    <p id="output-empty" class="output-empty">select a theme and click generate</p>
+  </div>
+</div>
+
+<script>
+  import {
+    THEMES,
+    generate,
+    FORMAT_DEFAULTS,
+    FORMAT_LIMITS,
+    type Theme,
+    type Format,
+  } from '../../lib/dummy-text';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const themeBtnsEl = document.getElementById('theme-btns') as HTMLDivElement;
+  const formatBtnsEl = document.getElementById('format-btns') as HTMLDivElement;
+  const countInput = document.getElementById('count-input') as HTMLInputElement;
+  const countDec = document.getElementById('count-dec') as HTMLButtonElement;
+  const countInc = document.getElementById('count-inc') as HTMLButtonElement;
+  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
+  const regenerateBtn = document.getElementById('regenerate-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const outputEl = document.getElementById('dt-output') as HTMLDivElement;
+  const outputEmpty = document.getElementById('output-empty') as HTMLParagraphElement;
+  const charCount = document.getElementById('char-count') as HTMLSpanElement;
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let currentTheme: Theme = 'lorem';
+  let currentFormat: Format = 'paragraphs';
+
+  const FORMATS: Array<{ id: Format; label: string }> = [
+    { id: 'paragraphs', label: 'paragraphs' },
+    { id: 'sentences', label: 'sentences' },
+    { id: 'words', label: 'words' },
+    { id: 'headlines', label: 'headlines' },
+  ];
+
+  // ── Render theme buttons ──────────────────────────────────────────────────────
+  THEMES.forEach((t) => {
+    const btn = document.createElement('button');
+    btn.className = 'type-btn' + (t.id === currentTheme ? ' active' : '');
+    btn.dataset.theme = t.id;
+    btn.textContent = t.label;
+    btn.title = t.description;
+    btn.addEventListener('click', () => setTheme(t.id));
+    themeBtnsEl.appendChild(btn);
+  });
+
+  function setTheme(id: Theme): void {
+    currentTheme = id;
+    themeBtnsEl.querySelectorAll<HTMLButtonElement>('.type-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.theme === id);
+    });
+  }
+
+  // ── Render format buttons ─────────────────────────────────────────────────────
+  FORMATS.forEach((f) => {
+    const btn = document.createElement('button');
+    btn.className = 'type-btn' + (f.id === currentFormat ? ' active' : '');
+    btn.dataset.format = f.id;
+    btn.textContent = f.label;
+    btn.addEventListener('click', () => setFormat(f.id));
+    formatBtnsEl.appendChild(btn);
+  });
+
+  function setFormat(id: Format): void {
+    currentFormat = id;
+    formatBtnsEl.querySelectorAll<HTMLButtonElement>('.type-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.format === id);
+    });
+    const limits = FORMAT_LIMITS[id];
+    countInput.min = String(limits.min);
+    countInput.max = String(limits.max);
+    countInput.value = String(FORMAT_DEFAULTS[id]);
+  }
+
+  // ── Count controls ────────────────────────────────────────────────────────────
+  function getCount(): number {
+    return parseInt(countInput.value, 10) || FORMAT_DEFAULTS[currentFormat];
+  }
+
+  countDec.addEventListener('click', () => {
+    const limits = FORMAT_LIMITS[currentFormat];
+    countInput.value = String(Math.max(limits.min, getCount() - 1));
+  });
+
+  countInc.addEventListener('click', () => {
+    const limits = FORMAT_LIMITS[currentFormat];
+    countInput.value = String(Math.min(limits.max, getCount() + 1));
+  });
+
+  // ── Generate ──────────────────────────────────────────────────────────────────
+  function doGenerate(seed?: number): void {
+    const text = generate({
+      theme: currentTheme,
+      format: currentFormat,
+      count: getCount(),
+      seed,
+    });
+
+    outputEmpty.hidden = true;
+    outputEl.innerHTML = '';
+
+    if (currentFormat === 'paragraphs') {
+      text.split('\n\n').forEach((para) => {
+        const p = document.createElement('p');
+        p.className = 'output-para';
+        p.textContent = para;
+        outputEl.appendChild(p);
+      });
+    } else if (currentFormat === 'headlines') {
+      text.split('\n').forEach((line) => {
+        const h = document.createElement('p');
+        h.className = 'output-headline';
+        h.textContent = line;
+        outputEl.appendChild(h);
+      });
+    } else {
+      const p = document.createElement('p');
+      p.className = 'output-para';
+      p.textContent = text;
+      outputEl.appendChild(p);
+    }
+
+    charCount.textContent = `${text.length.toLocaleString()} chars`;
+  }
+
+  generateBtn.addEventListener('click', () => doGenerate());
+  regenerateBtn.addEventListener('click', () => doGenerate(Date.now() + Math.random() * 1e9));
+
+  // ── Copy ──────────────────────────────────────────────────────────────────────
+  copyBtn.addEventListener('click', async () => {
+    const text = outputEl.textContent?.trim() ?? '';
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => (copyBtn.textContent = 'copy'), 1200);
+  });
+
+  // ── Init limits ───────────────────────────────────────────────────────────────
+  const initLimits = FORMAT_LIMITS[currentFormat];
+  countInput.min = String(initLimits.min);
+  countInput.max = String(initLimits.max);
+</script>
+
+<style>
+  .dt-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Section labels ──────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+
+  /* ── Theme selector ──────────────────────────────────────────────────────────── */
+  .theme-selector {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .theme-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  /* ── Options row ─────────────────────────────────────────────────────────────── */
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .format-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .format-btns {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Type buttons (theme + format) ───────────────────────────────────────────── */
+  /* :global because buttons are created dynamically in JS and lack Astro scope attrs */
+  :global(.type-btn) {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+    white-space: nowrap;
+  }
+
+  :global(.type-btn:hover) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  :global(.type-btn.active) {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+  }
+
+  /* ── Count control ───────────────────────────────────────────────────────────── */
+  .count-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .count-control {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+  }
+
+  .count-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+    transition: color 0.1s;
+    line-height: 1;
+  }
+
+  .count-btn:hover {
+    color: var(--fg);
+  }
+
+  .count-input {
+    background: none;
+    border: none;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    text-align: center;
+    width: 3rem;
+    padding: 0.25rem 0;
+    -moz-appearance: textfield;
+  }
+
+  .count-input::-webkit-inner-spin-button,
+  .count-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+  }
+
+  .count-input:focus {
+    outline: none;
+  }
+
+  /* ── Controls ────────────────────────────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  /* ── Output section ──────────────────────────────────────────────────────────── */
+  .output-section {
+    border: 1px solid var(--border);
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .char-count {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+
+  .dt-output {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: var(--fg);
+    min-height: 80px;
+  }
+
+  .output-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.output-para) {
+    margin: 0 0 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  :global(.output-para:last-child) {
+    margin-bottom: 0;
+  }
+
+  :global(.output-headline) {
+    margin: 0 0 0.4rem;
+    font-size: 0.9rem;
+    font-weight: normal;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4rem;
+  }
+
+  :global(.output-headline:last-child) {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .options-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .theme-selector {
+      flex-direction: column;
+    }
+  }
+</style>

@@ -1,0 +1,395 @@
+---
+// Fully client-side
+---
+
+<div class="lc-tool">
+  <!-- Input pane -->
+  <div class="lc-pane lc-pane--input">
+    <div class="lc-pane-header">
+      <span class="lc-pane-label">input</span>
+      <div class="lc-pane-actions">
+        <button id="lc-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="lc-editor-wrap">
+      <textarea
+        id="lc-input"
+        class="lc-textarea"
+        placeholder="Paste your list here…
+
+Works with newlines, commas, spaces,
+tabs, pipes, semicolons — or mixed."
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="List input"></textarea>
+    </div>
+  </div>
+
+  <!-- Controls pane -->
+  <div class="lc-controls">
+    <div class="lc-section">
+      <span class="lc-section-label">separator</span>
+      <select id="lc-separator" class="lc-select" aria-label="Input separator">
+        <option value="auto">auto-detect</option>
+        <option value="newline">newline</option>
+        <option value="comma">comma</option>
+        <option value="space">space</option>
+        <option value="tab">tab</option>
+        <option value="pipe">pipe ( | )</option>
+        <option value="semicolon">semicolon ( ; )</option>
+      </select>
+    </div>
+
+    <div class="lc-section">
+      <span class="lc-section-label">operations</span>
+      <div class="lc-checks">
+        <label class="lc-check"
+          ><input type="checkbox" id="lc-trim" checked /> trim whitespace</label
+        >
+        <label class="lc-check"
+          ><input type="checkbox" id="lc-remove-empty" checked /> remove empty</label
+        >
+        <label class="lc-check"><input type="checkbox" id="lc-dedup" /> remove duplicates</label>
+        <label class="lc-check"><input type="checkbox" id="lc-sort-alpha" /> sort a→z</label>
+        <label class="lc-check"><input type="checkbox" id="lc-sort-num" /> sort numerically</label>
+        <label class="lc-check"><input type="checkbox" id="lc-reverse" /> reverse</label>
+        <label class="lc-check"><input type="checkbox" id="lc-lower" /> lowercase</label>
+        <label class="lc-check"><input type="checkbox" id="lc-upper" /> uppercase</label>
+      </div>
+    </div>
+
+    <div class="lc-section">
+      <span class="lc-section-label">join with</span>
+      <select id="lc-joiner" class="lc-select" aria-label="Output join separator">
+        <option value="newline">newline</option>
+        <option value="comma">comma</option>
+        <option value="comma-space">comma + space</option>
+        <option value="space">space</option>
+        <option value="tab">tab</option>
+        <option value="pipe">pipe ( | )</option>
+        <option value="semicolon">semicolon ( ; )</option>
+      </select>
+    </div>
+
+    <div id="lc-stats" class="lc-stats" aria-live="polite"></div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="lc-pane lc-pane--output">
+    <div class="lc-pane-header">
+      <span class="lc-pane-label">output</span>
+      <div class="lc-pane-actions">
+        <button id="lc-copy-btn" class="action-btn" disabled aria-label="Copy output to clipboard"
+          >copy</button
+        >
+      </div>
+    </div>
+    <div class="lc-editor-wrap">
+      <textarea
+        id="lc-output"
+        class="lc-textarea lc-textarea--output"
+        readonly
+        placeholder="cleaned output will appear here"
+        spellcheck="false"
+        aria-label="List output"
+        aria-live="polite"></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { parseList, cleanList, joinList } from '../../lib/listCleaner';
+  import type { Separator, Joiner, CleanOptions } from '../../lib/listCleaner';
+
+  const inputEl = document.getElementById('lc-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('lc-output') as HTMLTextAreaElement;
+  const clearBtn = document.getElementById('lc-clear-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('lc-copy-btn') as HTMLButtonElement;
+  const statsEl = document.getElementById('lc-stats') as HTMLDivElement;
+  const separatorEl = document.getElementById('lc-separator') as HTMLSelectElement;
+  const joinerEl = document.getElementById('lc-joiner') as HTMLSelectElement;
+
+  const trimEl = document.getElementById('lc-trim') as HTMLInputElement;
+  const removeEmptyEl = document.getElementById('lc-remove-empty') as HTMLInputElement;
+  const dedupEl = document.getElementById('lc-dedup') as HTMLInputElement;
+  const sortAlphaEl = document.getElementById('lc-sort-alpha') as HTMLInputElement;
+  const sortNumEl = document.getElementById('lc-sort-num') as HTMLInputElement;
+  const reverseEl = document.getElementById('lc-reverse') as HTMLInputElement;
+  const lowerEl = document.getElementById('lc-lower') as HTMLInputElement;
+  const upperEl = document.getElementById('lc-upper') as HTMLInputElement;
+
+  // Mutually exclusive: lowercase/uppercase
+  lowerEl.addEventListener('change', () => {
+    if (lowerEl.checked) upperEl.checked = false;
+    process();
+  });
+  upperEl.addEventListener('change', () => {
+    if (upperEl.checked) lowerEl.checked = false;
+    process();
+  });
+  // Mutually exclusive: sort alpha/sort numeric
+  sortAlphaEl.addEventListener('change', () => {
+    if (sortAlphaEl.checked) sortNumEl.checked = false;
+    process();
+  });
+  sortNumEl.addEventListener('change', () => {
+    if (sortNumEl.checked) sortAlphaEl.checked = false;
+    process();
+  });
+
+  function process() {
+    const input = inputEl.value;
+
+    if (!input.trim()) {
+      outputEl.value = '';
+      copyBtn.disabled = true;
+      statsEl.textContent = '';
+      return;
+    }
+
+    const separator = separatorEl.value as Separator;
+    const joiner = joinerEl.value as Joiner;
+    const options: CleanOptions = {
+      trimWhitespace: trimEl.checked,
+      removeEmpty: removeEmptyEl.checked,
+      removeDuplicates: dedupEl.checked,
+      sortAlpha: sortAlphaEl.checked,
+      sortNumeric: sortNumEl.checked,
+      reverse: reverseEl.checked,
+      lowercase: lowerEl.checked,
+      uppercase: upperEl.checked,
+    };
+
+    const parsed = parseList(input, separator);
+    const cleaned = cleanList(parsed, options);
+    const result = joinList(cleaned, joiner);
+
+    outputEl.value = result;
+    copyBtn.disabled = result.length === 0;
+
+    const removed = parsed.length - cleaned.length;
+    statsEl.textContent = `${parsed.length} items → ${cleaned.length} items${removed > 0 ? ` (${removed} removed)` : ''}`;
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function debouncedProcess() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 150);
+  }
+
+  inputEl.addEventListener('input', debouncedProcess);
+  separatorEl.addEventListener('change', process);
+  joinerEl.addEventListener('change', process);
+  [trimEl, removeEmptyEl, dedupEl, sortAlphaEl, sortNumEl, reverseEl].forEach((el) =>
+    el.addEventListener('change', process),
+  );
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!outputEl.value) return;
+    await navigator.clipboard.writeText(outputEl.value);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+</script>
+
+<style>
+  .lc-tool {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 460px;
+  }
+
+  .lc-pane {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    min-width: 0;
+  }
+
+  .lc-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .lc-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .lc-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .lc-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .lc-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .lc-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .lc-textarea--output {
+    color: var(--fg);
+  }
+
+  /* ── Controls middle column ── */
+  .lc-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 180px;
+    flex-shrink: 0;
+    padding-top: 0.25rem;
+  }
+
+  .lc-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .lc-section-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .lc-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
+    outline: none;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .lc-select:focus {
+    border-color: var(--border-active);
+  }
+
+  .lc-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .lc-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--fg);
+    cursor: pointer;
+    line-height: 1.4;
+  }
+
+  .lc-check input[type='checkbox'] {
+    accent-color: var(--fg);
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .lc-stats {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    line-height: 1.4;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  @media (max-width: 768px) {
+    .lc-tool {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      height: auto;
+    }
+
+    .lc-pane {
+      height: 240px;
+    }
+
+    .lc-controls {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .lc-section {
+      min-width: 140px;
+    }
+  }
+</style>

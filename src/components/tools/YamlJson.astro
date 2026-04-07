@@ -1,0 +1,387 @@
+---
+// Fully client-side
+---
+
+<div class="yj-tool">
+  <!-- Input pane -->
+  <div class="yj-pane yj-pane--input">
+    <div class="yj-pane-header">
+      <div class="yj-header-left">
+        <span id="yj-input-label" class="yj-pane-label">input</span>
+      </div>
+      <div class="yj-pane-actions">
+        <button id="yj-swap-btn" class="action-btn" aria-label="Swap direction">swap ⇄</button>
+        <button id="yj-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="yj-editor-wrap">
+      <textarea
+        id="yj-input"
+        class="yj-textarea"
+        placeholder="Paste YAML or JSON here…
+
+Direction is auto-detected from the input."
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="Input"></textarea>
+    </div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="yj-pane yj-pane--output">
+    <div class="yj-pane-header">
+      <span id="yj-output-label" class="yj-pane-label">output</span>
+      <div class="yj-pane-actions">
+        <button id="yj-copy-btn" class="action-btn" disabled aria-label="Copy output">copy</button>
+        <button id="yj-download-btn" class="action-btn" disabled aria-label="Download output"
+          >download</button
+        >
+      </div>
+    </div>
+    <div id="yj-output" class="yj-output" aria-live="polite">
+      <span class="yj-placeholder">converted output will appear here</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { convert, detectDirection } from '../../lib/yamlJson';
+  import type { Direction } from '../../lib/yamlJson';
+
+  const inputEl = document.getElementById('yj-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('yj-output') as HTMLDivElement;
+  const inputLabel = document.getElementById('yj-input-label') as HTMLSpanElement;
+  const outputLabel = document.getElementById('yj-output-label') as HTMLSpanElement;
+  const copyBtn = document.getElementById('yj-copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('yj-download-btn') as HTMLButtonElement;
+  const clearBtn = document.getElementById('yj-clear-btn') as HTMLButtonElement;
+  const swapBtn = document.getElementById('yj-swap-btn') as HTMLButtonElement;
+
+  let currentOutput = '';
+  let manualDirection: Direction | null = null;
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function highlightJson(json: string): string {
+    return json.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+      (match) => {
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) return `<span class="yj-key">${escapeHtml(match)}</span>`;
+          return `<span class="yj-string">${escapeHtml(match)}</span>`;
+        }
+        if (/true|false/.test(match)) return `<span class="yj-bool">${match}</span>`;
+        if (/null/.test(match)) return `<span class="yj-null">${match}</span>`;
+        return `<span class="yj-number">${match}</span>`;
+      },
+    );
+  }
+
+  function highlightYaml(yamlStr: string): string {
+    return yamlStr
+      .split('\n')
+      .map((line) => {
+        const keyMatch = line.match(/^(\s*)([\w-]+)(\s*:)(.*)/);
+        if (keyMatch) {
+          const [, indent, key, colon, rest] = keyMatch;
+          const escapedRest = escapeHtml(rest);
+          const coloredRest = escapedRest
+            .replace(/('([^']*)'|"([^"]*)")/g, '<span class="yj-string">$1</span>')
+            .replace(/\b(true|false|null)\b/g, '<span class="yj-bool">$&</span>')
+            .replace(/(?<![a-zA-Z])-?\d+(\.\d+)?/g, '<span class="yj-number">$&</span>');
+          return `${escapeHtml(indent)}<span class="yj-key">${escapeHtml(key)}${escapeHtml(colon)}</span>${coloredRest}`;
+        }
+        const listMatch = line.match(/^(\s*-\s)(.*)/);
+        if (listMatch) {
+          return `<span class="yj-dim">${escapeHtml(listMatch[1])}</span>${escapeHtml(listMatch[2])}`;
+        }
+        return escapeHtml(line);
+      })
+      .join('\n');
+  }
+
+  function getEffectiveDirection(): Direction {
+    if (manualDirection) return manualDirection;
+    return detectDirection(inputEl.value);
+  }
+
+  function updateLabels(dir: Direction) {
+    if (dir === 'yaml-to-json') {
+      inputLabel.textContent = 'yaml input';
+      outputLabel.textContent = 'json output';
+    } else {
+      inputLabel.textContent = 'json input';
+      outputLabel.textContent = 'yaml output';
+    }
+  }
+
+  function process() {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      currentOutput = '';
+      outputEl.innerHTML = '<span class="yj-placeholder">converted output will appear here</span>';
+      outputEl.classList.remove('yj-output--error');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      updateLabels('yaml-to-json');
+      return;
+    }
+
+    const dir = getEffectiveDirection();
+    updateLabels(dir);
+
+    try {
+      const result = convert(src, dir);
+      currentOutput = result;
+
+      const highlighted =
+        dir === 'yaml-to-json'
+          ? highlightJson(escapeHtml(result))
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+          : highlightYaml(result);
+
+      outputEl.innerHTML = `<pre class="yj-pre">${highlighted}</pre>`;
+      outputEl.classList.remove('yj-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } catch (err) {
+      currentOutput = '';
+      outputEl.innerHTML = `<pre class="yj-pre yj-pre--error">${escapeHtml((err as Error).message)}</pre>`;
+      outputEl.classList.add('yj-output--error');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+    }
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  inputEl.addEventListener('input', () => {
+    manualDirection = null;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  });
+
+  swapBtn.addEventListener('click', () => {
+    if (currentOutput) {
+      const prevInput = inputEl.value;
+      inputEl.value = currentOutput;
+      // Flip direction
+      const current = getEffectiveDirection();
+      manualDirection = current === 'yaml-to-json' ? 'json-to-yaml' : 'yaml-to-json';
+      process();
+    } else {
+      // Just flip the direction for the next input
+      const current = getEffectiveDirection();
+      manualDirection = current === 'yaml-to-json' ? 'json-to-yaml' : 'yaml-to-json';
+      updateLabels(manualDirection);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    manualDirection = null;
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!currentOutput) return;
+    await navigator.clipboard.writeText(currentOutput);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!currentOutput) return;
+    const dir = getEffectiveDirection();
+    const ext = dir === 'yaml-to-json' ? 'json' : 'yaml';
+    const mime = dir === 'yaml-to-json' ? 'application/json' : 'text/yaml';
+    const blob = new Blob([currentOutput], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `converted.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  .yj-tool {
+    --yj-key: #c8b4f0;
+    --yj-string: #7ec8a0;
+    --yj-number: #d4a96a;
+    --yj-bool: #7aabcc;
+    --yj-null: #666;
+    --yj-error-bg: rgba(200, 50, 50, 0.12);
+    --yj-error-fg: #f07070;
+
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  .yj-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .yj-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .yj-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .yj-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    min-width: 90px;
+  }
+
+  .yj-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .yj-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .yj-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .yj-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  .yj-output {
+    flex: 1;
+    overflow: auto;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  .yj-output--error {
+    background: var(--yj-error-bg);
+  }
+
+  .yj-placeholder {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+    opacity: 0.5;
+  }
+
+  :global(.yj-pre) {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  :global(.yj-pre--error) {
+    color: var(--yj-error-fg);
+  }
+
+  :global(.yj-key) {
+    color: var(--yj-key);
+    font-weight: 600;
+  }
+  :global(.yj-string) {
+    color: var(--yj-string);
+  }
+  :global(.yj-number) {
+    color: var(--yj-number);
+  }
+  :global(.yj-bool) {
+    color: var(--yj-bool);
+  }
+  :global(.yj-null) {
+    color: var(--yj-null);
+  }
+  :global(.yj-dim) {
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  @media (max-width: 640px) {
+    .yj-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .yj-pane {
+      height: 300px;
+    }
+  }
+</style>

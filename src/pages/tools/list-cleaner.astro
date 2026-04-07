@@ -1,0 +1,15 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import ListCleaner from '../../components/tools/ListCleaner.astro';
+---
+
+<ToolLayout slug="list-cleaner">
+  <ListCleaner />
+</ToolLayout>
+
+<style is:global>
+  body:has(#lc-input) .tool-page {
+    max-width: 1400px;
+    padding: 0 1.5rem;
+  }
+</style>

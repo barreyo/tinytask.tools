@@ -1,0 +1,298 @@
+---
+import { currencies } from '../../data/currencies';
+const total = currencies.length;
+---
+
+<div class="cl-tool">
+  <!-- Search bar -->
+  <div class="cl-search-wrap">
+    <input
+      id="cl-search"
+      class="cl-search"
+      type="search"
+      placeholder="Search by code, name, country, or symbol… (e.g. USD, yen, Japan, ¥)"
+      autocomplete="off"
+      spellcheck="false"
+      aria-label="Search currencies"
+    />
+  </div>
+
+  <div id="cl-count" class="cl-count" aria-live="polite">
+    Showing all {total} currencies
+  </div>
+
+  <!-- Table -->
+  <div class="cl-table-wrap" role="region" aria-label="Currency list">
+    <table class="cl-table" id="cl-table">
+      <thead>
+        <tr>
+          <th class="cl-th cl-th--flags">flags</th>
+          <th class="cl-th cl-th--code">code</th>
+          <th class="cl-th cl-th--num">numeric</th>
+          <th class="cl-th cl-th--sym">symbol</th>
+          <th class="cl-th cl-th--name">name</th>
+          <th class="cl-th cl-th--exp">decimals</th>
+          <th class="cl-th cl-th--countries">countries</th>
+        </tr>
+      </thead>
+      <tbody id="cl-tbody">
+        {
+          currencies.map((c) => (
+            <tr
+              class="cl-row"
+              data-code={c.code.toLowerCase()}
+              data-name={c.name.toLowerCase()}
+              data-sym={c.symbol.toLowerCase()}
+              data-countries={c.countries.map((x) => x.name.toLowerCase()).join(' ')}
+            >
+              <td class="cl-td cl-td--flags" aria-label={c.countries.map((x) => x.name).join(', ')}>
+                {c.countries.slice(0, 4).map((x) => (
+                  <span class="cl-flag" title={x.name}>
+                    {x.flag}
+                  </span>
+                ))}
+                {c.countries.length > 4 && (
+                  <span class="cl-flag-more">+{c.countries.length - 4}</span>
+                )}
+              </td>
+              <td class="cl-td cl-td--code">
+                <span class="cl-code">{c.code}</span>
+              </td>
+              <td class="cl-td cl-td--num">
+                <span class="cl-num">{c.numericCode}</span>
+              </td>
+              <td class="cl-td cl-td--sym">
+                <span class="cl-sym">{c.symbol}</span>
+              </td>
+              <td class="cl-td cl-td--name">{c.name}</td>
+              <td class="cl-td cl-td--exp">
+                <span class={`cl-exp-badge cl-exp-badge--${c.exponent}`}>{c.exponent}</span>
+              </td>
+              <td class="cl-td cl-td--countries">{c.countries.map((x) => x.name).join(', ')}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+
+    <div id="cl-empty" class="cl-empty" hidden>No currencies match your search.</div>
+  </div>
+</div>
+
+<script>
+  const searchEl = document.getElementById('cl-search') as HTMLInputElement;
+  const countEl = document.getElementById('cl-count') as HTMLDivElement;
+  const tbody = document.getElementById('cl-tbody') as HTMLTableSectionElement;
+  const emptyEl = document.getElementById('cl-empty') as HTMLDivElement;
+
+  const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('.cl-row'));
+  const total = rows.length;
+
+  function filter(query: string) {
+    const q = query.toLowerCase().trim();
+    let visible = 0;
+
+    for (const row of rows) {
+      const matches =
+        !q ||
+        row.dataset.code?.includes(q) ||
+        row.dataset.name?.includes(q) ||
+        row.dataset.sym?.includes(q) ||
+        row.dataset.countries?.includes(q);
+
+      if (matches) {
+        row.hidden = false;
+        visible++;
+      } else {
+        row.hidden = true;
+      }
+    }
+
+    if (visible === 0) {
+      emptyEl.hidden = false;
+      countEl.textContent = 'No results';
+    } else {
+      emptyEl.hidden = true;
+      countEl.textContent =
+        visible === total ? `Showing all ${total} currencies` : `${visible} of ${total} currencies`;
+    }
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => filter(searchEl.value), 120);
+  });
+</script>
+
+<style>
+  .cl-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .cl-search-wrap {
+    position: relative;
+  }
+
+  .cl-search {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.9rem;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .cl-search:focus {
+    border-color: var(--border-active);
+  }
+
+  .cl-search::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .cl-count {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .cl-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+
+  .cl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .cl-th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 1;
+  }
+
+  .cl-td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+
+  .cl-row:last-child .cl-td {
+    border-bottom: none;
+  }
+
+  .cl-row:hover .cl-td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* Columns */
+  .cl-th--flags,
+  .cl-td--flags {
+    width: 80px;
+  }
+  .cl-th--code,
+  .cl-td--code {
+    width: 60px;
+  }
+  .cl-th--num,
+  .cl-td--num {
+    width: 70px;
+  }
+  .cl-th--sym,
+  .cl-td--sym {
+    width: 60px;
+  }
+  .cl-th--exp,
+  .cl-td--exp {
+    width: 80px;
+    text-align: center;
+  }
+  .cl-th--exp {
+    text-align: center;
+  }
+  .cl-th--countries {
+    min-width: 180px;
+  }
+
+  .cl-flag {
+    font-size: 1rem;
+    margin-right: 2px;
+    display: inline-block;
+  }
+
+  .cl-flag-more {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    vertical-align: middle;
+  }
+
+  .cl-code {
+    font-weight: 700;
+    color: var(--fg);
+    letter-spacing: 0.04em;
+  }
+
+  .cl-num {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+  }
+
+  .cl-sym {
+    color: #d4a96a;
+    font-size: 0.9rem;
+  }
+
+  /* Exponent badges */
+  .cl-exp-badge {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  .cl-exp-badge--0 {
+    border-color: #7a3a3a;
+    color: #c87e7e;
+    background: rgba(180, 80, 80, 0.08);
+  }
+
+  .cl-exp-badge--2 {
+    border-color: #3a5a7a;
+    color: #7aabcc;
+    background: rgba(80, 130, 200, 0.08);
+  }
+
+  .cl-exp-badge--3 {
+    border-color: #5a7a3a;
+    color: #a0c87e;
+    background: rgba(100, 180, 80, 0.08);
+  }
+
+  .cl-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+  }
+</style>

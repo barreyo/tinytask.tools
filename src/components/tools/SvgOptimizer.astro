@@ -1,0 +1,562 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="svg-tool">
+  <!-- Input section -->
+  <div class="input-section">
+    <div class="input-header">
+      <span class="section-label">svg input</span>
+      <div class="input-actions">
+        <label class="action-btn" for="svg-file-input">upload file</label>
+        <input id="svg-file-input" type="file" accept=".svg,image/svg+xml" hidden />
+        <button id="clear-input-btn" class="action-btn">clear</button>
+      </div>
+    </div>
+    <div id="drop-zone" class="drop-zone" role="region" aria-label="SVG drop zone">
+      <textarea
+        id="svg-input"
+        class="svg-textarea"
+        placeholder="Paste SVG code here or drop an .svg file…"
+        spellcheck="false"
+        rows="10"
+        aria-label="SVG input"></textarea>
+      <div id="drop-overlay" class="drop-overlay" hidden>
+        <span>drop .svg file</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls row -->
+  <div class="controls">
+    <button id="optimize-btn" class="action-btn primary">optimize</button>
+    <button id="toggle-plugins-btn" class="action-btn">plugins ▾</button>
+    <span id="stats-inline" class="stats-inline" hidden></span>
+  </div>
+
+  <!-- Plugin panel -->
+  <div id="plugin-panel" class="plugin-panel" hidden>
+    <div class="plugin-panel-header">
+      <span class="section-label">plugins</span>
+      <div class="plugin-panel-actions">
+        <button id="enable-all-btn" class="action-btn">enable all</button>
+        <button id="disable-all-btn" class="action-btn">disable all</button>
+      </div>
+    </div>
+    <div id="plugin-list" class="plugin-list"></div>
+  </div>
+
+  <!-- Output section -->
+  <div class="output-section" id="output-section">
+    <div class="output-header">
+      <span class="section-label">optimized svg</span>
+      <div class="output-actions">
+        <button id="copy-btn" class="action-btn">copy</button>
+        <button id="download-btn" class="action-btn">download</button>
+      </div>
+    </div>
+    <div class="output-body">
+      <div id="output-cols" class="output-cols">
+        <div class="output-col">
+          <span class="section-label">code</span>
+          <pre id="svg-output" class="svg-output" aria-live="polite" aria-label="Optimized SVG">
+          </pre>
+        </div>
+        <div class="output-col preview-col">
+          <span class="section-label">preview</span>
+          <div id="svg-preview" class="svg-preview" aria-label="SVG preview"></div>
+        </div>
+      </div>
+      <p id="output-empty" class="output-empty">paste svg and click optimize to see results</p>
+      <p id="output-error" class="output-error" hidden></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    optimizeSvg,
+    DEFAULT_PLUGINS,
+    formatBytes,
+    type SvgPlugin,
+  } from '../../lib/svg-optimizer';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('svg-input') as HTMLTextAreaElement;
+  const fileInput = document.getElementById('svg-file-input') as HTMLInputElement;
+  const dropZone = document.getElementById('drop-zone') as HTMLDivElement;
+  const dropOverlay = document.getElementById('drop-overlay') as HTMLDivElement;
+  const optimizeBtn = document.getElementById('optimize-btn') as HTMLButtonElement;
+  const togglePluginsBtn = document.getElementById('toggle-plugins-btn') as HTMLButtonElement;
+  const pluginPanel = document.getElementById('plugin-panel') as HTMLDivElement;
+  const pluginList = document.getElementById('plugin-list') as HTMLDivElement;
+  const enableAllBtn = document.getElementById('enable-all-btn') as HTMLButtonElement;
+  const disableAllBtn = document.getElementById('disable-all-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('download-btn') as HTMLButtonElement;
+  const clearInputBtn = document.getElementById('clear-input-btn') as HTMLButtonElement;
+  const svgOutput = document.getElementById('svg-output') as HTMLPreElement;
+  const svgPreview = document.getElementById('svg-preview') as HTMLDivElement;
+  const statsInline = document.getElementById('stats-inline') as HTMLSpanElement;
+  const outputEmpty = document.getElementById('output-empty') as HTMLParagraphElement;
+  const outputError = document.getElementById('output-error') as HTMLParagraphElement;
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let plugins: SvgPlugin[] = DEFAULT_PLUGINS.map((p) => ({ ...p }));
+  let lastOptimizedSvg = '';
+  let pluginPanelOpen = false;
+
+  // ── Plugin panel ──────────────────────────────────────────────────────────────
+  function renderPlugins(): void {
+    pluginList.innerHTML = plugins
+      .map(
+        (p, i) => `
+      <label class="plugin-row" title="${p.description}">
+        <input type="checkbox" class="plugin-checkbox" data-index="${i}" ${p.enabled ? 'checked' : ''} />
+        <div class="plugin-text">
+          <span class="plugin-name">${p.name}</span>
+          <span class="plugin-desc">${p.description}</span>
+        </div>
+      </label>`,
+      )
+      .join('');
+
+    pluginList.querySelectorAll<HTMLInputElement>('.plugin-checkbox').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const idx = parseInt(cb.dataset.index ?? '0', 10);
+        plugins[idx].enabled = cb.checked;
+      });
+    });
+  }
+
+  togglePluginsBtn.addEventListener('click', () => {
+    pluginPanelOpen = !pluginPanelOpen;
+    pluginPanel.hidden = !pluginPanelOpen;
+    togglePluginsBtn.textContent = pluginPanelOpen ? 'plugins ▴' : 'plugins ▾';
+  });
+
+  enableAllBtn.addEventListener('click', () => {
+    plugins.forEach((p) => (p.enabled = true));
+    renderPlugins();
+  });
+
+  disableAllBtn.addEventListener('click', () => {
+    plugins.forEach((p) => (p.enabled = false));
+    renderPlugins();
+  });
+
+  renderPlugins();
+
+  // ── File input / drag-drop ────────────────────────────────────────────────────
+  function loadSvgText(text: string): void {
+    inputEl.value = text;
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => loadSvgText((e.target?.result as string) ?? '');
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropOverlay.hidden = false;
+  });
+
+  dropZone.addEventListener('dragleave', (e) => {
+    if (!dropZone.contains(e.relatedTarget as Node)) {
+      dropOverlay.hidden = true;
+    }
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropOverlay.hidden = true;
+    const file = e.dataTransfer?.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => loadSvgText((ev.target?.result as string) ?? '');
+    reader.readAsText(file);
+  });
+
+  // ── Optimize ──────────────────────────────────────────────────────────────────
+  function showError(msg: string): void {
+    outputError.textContent = msg;
+    outputError.hidden = false;
+    svgOutput.textContent = '';
+    svgPreview.innerHTML = '';
+    statsInline.hidden = true;
+    outputEmpty.hidden = true;
+    lastOptimizedSvg = '';
+  }
+
+  function optimize(): void {
+    const input = inputEl.value.trim();
+    if (!input) return;
+
+    outputError.hidden = true;
+    outputEmpty.hidden = true;
+
+    try {
+      const result = optimizeSvg(input, plugins);
+      lastOptimizedSvg = result.data;
+
+      svgOutput.textContent = result.data;
+
+      // Sanitize preview: only render if it parses as valid XML with <svg>
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(result.data, 'image/svg+xml');
+      const parseError = doc.querySelector('parsererror');
+      svgPreview.innerHTML = '';
+      if (!parseError) {
+        const svgEl = doc.documentElement.cloneNode(true) as SVGElement;
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.width = '100%';
+        svgEl.style.height = '100%';
+        svgEl.style.maxHeight = '100%';
+        svgPreview.appendChild(svgEl);
+      }
+
+      const savePct = result.savingsPercent.toFixed(1);
+      const sign = result.savings >= 0 ? '-' : '+';
+      const savedAbs = Math.abs(result.savings);
+      statsInline.textContent = `${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${sign}${formatBytes(savedAbs)}, ${sign}${Math.abs(result.savingsPercent).toFixed(1)}%)`;
+      statsInline.hidden = false;
+      void savePct;
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to optimize SVG.');
+    }
+  }
+
+  optimizeBtn.addEventListener('click', optimize);
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      optimize();
+    }
+  });
+
+  // ── Copy / download ───────────────────────────────────────────────────────────
+  copyBtn.addEventListener('click', async () => {
+    if (!lastOptimizedSvg) return;
+    await navigator.clipboard.writeText(lastOptimizedSvg);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => (copyBtn.textContent = 'copy'), 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!lastOptimizedSvg) return;
+    const blob = new Blob([lastOptimizedSvg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'optimized.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Clear ─────────────────────────────────────────────────────────────────────
+  clearInputBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    svgOutput.textContent = '';
+    svgPreview.innerHTML = '';
+    statsInline.hidden = true;
+    outputEmpty.hidden = false;
+    outputError.hidden = true;
+    lastOptimizedSvg = '';
+    inputEl.focus();
+  });
+</script>
+
+<style>
+  .svg-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Section labels ──────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Input section ───────────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .input-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .drop-zone {
+    position: relative;
+  }
+
+  .svg-textarea {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+    min-height: 160px;
+  }
+
+  .svg-textarea::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .svg-textarea:focus {
+    outline: none;
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    pointer-events: none;
+    border: 1px dashed var(--border-active);
+  }
+
+  /* ── Controls ────────────────────────────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .stats-inline {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-block;
+    text-decoration: none;
+    text-align: center;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  /* ── Plugin panel ────────────────────────────────────────────────────────────── */
+  .plugin-panel {
+    border: 1px solid var(--border);
+  }
+
+  .plugin-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .plugin-panel-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .plugin-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0;
+  }
+
+  :global(.plugin-row) {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  :global(.plugin-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.plugin-checkbox) {
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+    accent-color: var(--fg);
+  }
+
+  :global(.plugin-text) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  :global(.plugin-name) {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+  }
+
+  :global(.plugin-desc) {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+
+  /* ── Output section ──────────────────────────────────────────────────────────── */
+  .output-section {
+    border: 1px solid var(--border);
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .output-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .output-body {
+    padding: 0;
+  }
+
+  .output-empty,
+  .output-error {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+  }
+
+  .output-error {
+    color: #e05c5c;
+  }
+
+  .output-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: none;
+  }
+
+  .output-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .output-col .section-label {
+    display: block;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .output-col + .output-col {
+    border-left: 1px solid var(--border);
+  }
+
+  .svg-output {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-all;
+    white-space: pre-wrap;
+    min-height: 120px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+
+  .svg-preview {
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    max-height: 360px;
+    overflow: hidden;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .output-cols {
+      grid-template-columns: 1fr;
+    }
+
+    .output-col + .output-col {
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .controls {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

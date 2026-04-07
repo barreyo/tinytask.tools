@@ -1,0 +1,15 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import DiffChecker from '../../components/tools/DiffChecker.astro';
+---
+
+<ToolLayout slug="diff-checker">
+  <DiffChecker />
+</ToolLayout>
+
+<style is:global>
+  body:has(#dc-original) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

@@ -2,6 +2,16 @@
 import Layout from '../layouts/Layout.astro';
 import ToolCard from '../components/ToolCard.astro';
 import { tools } from '../data/tools';
+import popularity from '../data/tool-popularity.json';
+
+const hits = popularity as Record<string, number>;
+const sortedTools = [...tools].sort((a, b) => {
+  const aHits = hits[a.slug] ?? 0;
+  const bHits = hits[b.slug] ?? 0;
+  if (bHits !== aHits) return bHits - aHits;
+  // Preserve original order for ties (including both at 0)
+  return tools.indexOf(a) - tools.indexOf(b);
+});
 ---
 
 <Layout description="tinytask.tools — a collection of small utilities.">
@@ -15,7 +25,7 @@ import { tools } from '../data/tools';
     </header>
 
     <div class="tool-grid">
-      {tools.map((tool) => <ToolCard tool={tool} />)}
+      {sortedTools.map((tool) => <ToolCard tool={tool} />)}
     </div>
   </div>
 </Layout>

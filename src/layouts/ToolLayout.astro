@@ -11,6 +11,9 @@ const tool = tools.find((t) => t.slug === slug);
 ---
 
 <Layout title={tool?.name} description={tool?.description}>
+  <script define:vars={{ slug }}>
+    navigator.sendBeacon?.('/api/hit?tool=' + slug);
+  </script>
   <div class="tool-page">
     <nav class="tool-nav">
       <a href="/" class="back-link">← tt_</a>

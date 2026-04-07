@@ -57,4 +57,74 @@ export const tools: Tool[] = [
     tags: ['time', 'convert'],
     implemented: true,
   },
+  {
+    slug: 'list-cleaner',
+    name: 'List Cleaner',
+    description: 'Paste a messy list and deduplicate, sort, trim, or reformat it instantly.',
+    tags: ['list', 'format', 'clean'],
+    implemented: true,
+  },
+  {
+    slug: 'luhn-checker',
+    name: 'Luhn Checker',
+    description:
+      'Validate credit card numbers or generate a valid test number for a given IIN/BIN.',
+    tags: ['luhn', 'credit card', 'validate'],
+    implemented: true,
+  },
+  {
+    slug: 'jwt-debugger',
+    name: 'JWT Debugger',
+    description:
+      'Decode JSON Web Tokens in the browser — header, payload, and signature — without sending your token anywhere.',
+    tags: ['jwt', 'decode', 'auth'],
+    implemented: true,
+  },
+  {
+    slug: 'currency-lookup',
+    name: 'ISO 4217 Currency Lookup',
+    description:
+      'Search all ISO 4217 currency codes with exponents, symbols, numeric codes, and country flags.',
+    tags: ['currency', 'iso', 'finance'],
+    implemented: true,
+  },
+  {
+    slug: 'yaml-json',
+    name: 'YAML ↔ JSON Converter',
+    description: 'Convert between YAML and JSON instantly in the browser.',
+    tags: ['yaml', 'json', 'convert'],
+    implemented: true,
+  },
+  {
+    slug: 'diff-checker',
+    name: 'Diff Checker',
+    description:
+      'Compare two texts side-by-side or inline — great for config files and API responses.',
+    tags: ['diff', 'compare', 'text'],
+    implemented: true,
+  },
+  {
+    slug: 'svg-optimizer',
+    name: 'SVG Optimizer',
+    description:
+      'Minify and clean SVG files in the browser using SVGO — strip metadata, collapse groups, and shrink path data.',
+    tags: ['svg', 'optimize', 'minify'],
+    implemented: true,
+  },
+  {
+    slug: 'image-optimizer',
+    name: 'Image → WebP',
+    description:
+      'Convert JPEG, PNG, and other images to WebP with adjustable quality and optional resizing — fully in the browser.',
+    tags: ['image', 'webp', 'optimize', 'convert'],
+    implemented: true,
+  },
+  {
+    slug: 'dummy-text',
+    name: 'Dummy Text Generator',
+    description:
+      'Generate themed placeholder text — Lorem Ipsum, Fintech, Startup, Corporate, Developer, Design, Legal, and Hipster flavors.',
+    tags: ['text', 'placeholder', 'lorem', 'generate'],
+    implemented: true,
+  },
 ];
