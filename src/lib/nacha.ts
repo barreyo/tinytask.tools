@@ -212,7 +212,17 @@ export interface NachaFile {
 // Per moov-io/ach: 27-29 checking debit, 37-39 savings debit,
 // 46-48 GL debit, 55-56 loan debit
 const DEBIT_TRANSACTION_CODES = new Set([
-  '27', '28', '29', '37', '38', '39', '46', '47', '48', '55', '56',
+  '27',
+  '28',
+  '29',
+  '37',
+  '38',
+  '39',
+  '46',
+  '47',
+  '48',
+  '55',
+  '56',
 ]);
 
 export function isDebitTransactionCode(tc: string): boolean {

@@ -17,15 +17,15 @@
       autocorrect="off"
       autocapitalize="off"
       rows="10"
-      placeholder="Paste raw HTTP headers here…
+      placeholder='Paste raw HTTP headers here…
 
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
 Cache-Control: max-age=3600, public
-ETag: &quot;abc123&quot;
+ETag: "abc123"
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 X-Frame-Options: DENY
-Content-Length: 1024"
+Content-Length: 1024'
       aria-label="Raw HTTP headers input"></textarea>
   </div>
 
@@ -41,7 +41,8 @@ Content-Length: 1024"
         <button id="copy-table-btn" class="action-btn">copy as markdown</button>
       </div>
     </div>
-    <div id="header-table" class="header-table" aria-live="polite" aria-label="Parsed headers"></div>
+    <div id="header-table" class="header-table" aria-live="polite" aria-label="Parsed headers">
+    </div>
   </div>
 
   <!-- Empty state -->
@@ -126,11 +127,9 @@ Content-Length: 1024"
       const explanation = (h.explanation ?? '').replace(/\|/g, '\\|');
       return `| ${name} | ${value} | ${explanation} |`;
     });
-    return [
-      '| Header | Value | Description |',
-      '|--------|-------|-------------|',
-      ...rows,
-    ].join('\n');
+    return ['| Header | Value | Description |', '|--------|-------|-------------|', ...rows].join(
+      '\n',
+    );
   }
 
   let debounceTimer: ReturnType<typeof setTimeout>;

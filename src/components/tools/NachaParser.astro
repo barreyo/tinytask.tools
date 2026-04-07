@@ -98,9 +98,15 @@
   <div id="field-tooltip" class="field-tooltip" hidden role="tooltip">
     <div class="field-tooltip-name" id="ft-name"></div>
     <div class="field-tooltip-body">
-      <div class="field-tooltip-row"><span class="ft-label">value</span><span class="ft-value" id="ft-raw"></span></div>
-      <div class="field-tooltip-row" id="ft-interpreted-row" hidden><span class="ft-label">meaning</span><span class="ft-value ft-meaning" id="ft-val"></span></div>
-      <div class="field-tooltip-row"><span class="ft-label">position</span><span class="ft-value" id="ft-pos"></span></div>
+      <div class="field-tooltip-row">
+        <span class="ft-label">value</span><span class="ft-value" id="ft-raw"></span>
+      </div>
+      <div class="field-tooltip-row" id="ft-interpreted-row" hidden>
+        <span class="ft-label">meaning</span><span class="ft-value ft-meaning" id="ft-val"></span>
+      </div>
+      <div class="field-tooltip-row">
+        <span class="ft-label">position</span><span class="ft-value" id="ft-pos"></span>
+      </div>
       <div class="field-tooltip-desc" id="ft-desc"></div>
     </div>
   </div>
@@ -184,293 +190,527 @@
   let _cleanup: AbortController | undefined;
 
   function init() {
-  _cleanup?.abort();
-  _cleanup = new AbortController();
+    _cleanup?.abort();
+    _cleanup = new AbortController();
 
-  const nachaInput = document.getElementById('nacha-input') as HTMLTextAreaElement;
-  if (!nachaInput) return;
+    const nachaInput = document.getElementById('nacha-input') as HTMLTextAreaElement;
+    if (!nachaInput) return;
 
-  // ── DOM refs ──
-  const tabParse = document.getElementById('tab-parse') as HTMLButtonElement;
-  const tabGenerate = document.getElementById('tab-generate') as HTMLButtonElement;
-  const panelParse = document.getElementById('panel-parse') as HTMLDivElement;
-  const panelGenerate = document.getElementById('panel-generate') as HTMLDivElement;
-  const fileInput = document.getElementById('nacha-file-input') as HTMLInputElement;
-  const dropZone = document.getElementById('drop-zone') as HTMLDivElement;
-  const dropOverlay = document.getElementById('drop-overlay') as HTMLDivElement;
-  const loadSampleBtn = document.getElementById('load-sample-btn') as HTMLButtonElement;
-  const parseClearBtn = document.getElementById('parse-clear-btn') as HTMLButtonElement;
-  const parseSummary = document.getElementById('parse-summary') as HTMLDivElement;
-  const summaryGrid = document.getElementById('summary-grid') as HTMLDivElement;
-  const parseOutput = document.getElementById('parse-output') as HTMLDivElement;
-  const recordsView = document.getElementById('records-view') as HTMLDivElement;
-  const parseErrors = document.getElementById('parse-errors') as HTMLDivElement;
-  const errorList = document.getElementById('error-list') as HTMLUListElement;
-  const copyParsedBtn = document.getElementById('copy-parsed-btn') as HTMLButtonElement;
-  const downloadParsedBtn = document.getElementById('download-parsed-btn') as HTMLButtonElement;
-  const validationStatus = document.getElementById('validation-status') as HTMLDivElement;
-  const statusIcon = document.getElementById('status-icon') as HTMLSpanElement;
-  const statusText = document.getElementById('status-text') as HTMLSpanElement;
-  const statusDetail = document.getElementById('status-detail') as HTMLSpanElement;
-  const errorCount = document.getElementById('error-count') as HTMLSpanElement;
+    // ── DOM refs ──
+    const tabParse = document.getElementById('tab-parse') as HTMLButtonElement;
+    const tabGenerate = document.getElementById('tab-generate') as HTMLButtonElement;
+    const panelParse = document.getElementById('panel-parse') as HTMLDivElement;
+    const panelGenerate = document.getElementById('panel-generate') as HTMLDivElement;
+    const fileInput = document.getElementById('nacha-file-input') as HTMLInputElement;
+    const dropZone = document.getElementById('drop-zone') as HTMLDivElement;
+    const dropOverlay = document.getElementById('drop-overlay') as HTMLDivElement;
+    const loadSampleBtn = document.getElementById('load-sample-btn') as HTMLButtonElement;
+    const parseClearBtn = document.getElementById('parse-clear-btn') as HTMLButtonElement;
+    const parseSummary = document.getElementById('parse-summary') as HTMLDivElement;
+    const summaryGrid = document.getElementById('summary-grid') as HTMLDivElement;
+    const parseOutput = document.getElementById('parse-output') as HTMLDivElement;
+    const recordsView = document.getElementById('records-view') as HTMLDivElement;
+    const parseErrors = document.getElementById('parse-errors') as HTMLDivElement;
+    const errorList = document.getElementById('error-list') as HTMLUListElement;
+    const copyParsedBtn = document.getElementById('copy-parsed-btn') as HTMLButtonElement;
+    const downloadParsedBtn = document.getElementById('download-parsed-btn') as HTMLButtonElement;
+    const validationStatus = document.getElementById('validation-status') as HTMLDivElement;
+    const statusIcon = document.getElementById('status-icon') as HTMLSpanElement;
+    const statusText = document.getElementById('status-text') as HTMLSpanElement;
+    const statusDetail = document.getElementById('status-detail') as HTMLSpanElement;
+    const errorCount = document.getElementById('error-count') as HTMLSpanElement;
 
-  // Generate tab refs
-  const genBatches = document.getElementById('gen-batches') as HTMLDivElement;
-  const genAddBatchBtn = document.getElementById('gen-add-batch-btn') as HTMLButtonElement;
-  const genPreview = document.getElementById('gen-preview') as HTMLPreElement;
-  const genCopyBtn = document.getElementById('gen-copy-btn') as HTMLButtonElement;
-  const genDownloadBtn = document.getElementById('gen-download-btn') as HTMLButtonElement;
+    // Generate tab refs
+    const genBatches = document.getElementById('gen-batches') as HTMLDivElement;
+    const genAddBatchBtn = document.getElementById('gen-add-batch-btn') as HTMLButtonElement;
+    const genPreview = document.getElementById('gen-preview') as HTMLPreElement;
+    const genCopyBtn = document.getElementById('gen-copy-btn') as HTMLButtonElement;
+    const genDownloadBtn = document.getElementById('gen-download-btn') as HTMLButtonElement;
 
-  let currentRaw = '';
-  let currentParsed: NachaFile | null = null;
+    let currentRaw = '';
+    let currentParsed: NachaFile | null = null;
 
-  // ── Tab switching ──
-  function switchTab(tab: 'parse' | 'generate') {
-    const isParse = tab === 'parse';
-    tabParse.classList.toggle('active', isParse);
-    tabGenerate.classList.toggle('active', !isParse);
-    tabParse.setAttribute('aria-selected', String(isParse));
-    tabGenerate.setAttribute('aria-selected', String(!isParse));
-    panelParse.hidden = !isParse;
-    panelGenerate.hidden = isParse;
-  }
-
-  tabParse.addEventListener('click', () => switchTab('parse'));
-  tabGenerate.addEventListener('click', () => switchTab('generate'));
-
-  // ── Helpers ──
-  function escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  async function copyText(text: string, btn: HTMLButtonElement) {
-    await navigator.clipboard.writeText(text);
-    const orig = btn.textContent;
-    btn.textContent = 'copied';
-    setTimeout(() => {
-      btn.textContent = orig;
-    }, 1200);
-  }
-
-  function downloadFile(content: string, filename: string) {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // ── Record type label & color class ──
-  const RECORD_TYPE_LABELS: Record<string, string> = {
-    '1': 'File Header',
-    '5': 'Batch Header',
-    '6': 'Entry Detail',
-    '7': 'Addenda',
-    '8': 'Batch Control',
-    '9': 'File Control',
-  };
-
-  // ── Field layout per record type (position ranges, field name, optional formatter) ──
-  interface FieldDef {
-    start: number;
-    end: number;
-    name: string;
-    fmt?: (val: string) => string;
-    desc?: string;
-  }
-
-  const FILE_HEADER_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "1" for File Header' },
-    { start: 1, end: 3, name: 'Priority Code', desc: 'Always "01"' },
-    { start: 3, end: 13, name: 'Immediate Destination', desc: 'Routing number of the ACH Operator or receiving point' },
-    { start: 13, end: 23, name: 'Immediate Origin', desc: 'Routing number of the sending point' },
-    { start: 23, end: 29, name: 'File Creation Date', desc: 'Date file was prepared (YYMMDD)' },
-    { start: 29, end: 33, name: 'File Creation Time', desc: 'Time file was created (HHmm)' },
-    { start: 33, end: 34, name: 'File ID Modifier', desc: 'Distinguishes between multiple files created on the same date (A-Z, 0-9)' },
-    { start: 34, end: 37, name: 'Record Size', desc: 'Always "094"' },
-    { start: 37, end: 39, name: 'Blocking Factor', desc: 'Always "10"' },
-    { start: 39, end: 40, name: 'Format Code', desc: 'Always "1"' },
-    { start: 40, end: 63, name: 'Destination Name', desc: 'Name of the receiving ACH Operator or institution' },
-    { start: 63, end: 86, name: 'Origin Name', desc: 'Name of the originating ACH Operator or institution' },
-    { start: 86, end: 94, name: 'Reference Code', desc: 'Optional field for originator\'s internal use' },
-  ];
-
-  const BATCH_HEADER_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "5" for Batch Header' },
-    { start: 1, end: 4, name: 'Service Class Code', fmt: (v) => describeServiceClassCode(v.trim()), desc: '200=Mixed, 220=Credits Only, 225=Debits Only' },
-    { start: 4, end: 20, name: 'Company Name', desc: 'Originator\'s company name, may appear on receiver\'s statement' },
-    { start: 20, end: 40, name: 'Discretionary Data', desc: 'Optional field for originator/ODFI internal codes' },
-    { start: 40, end: 50, name: 'Company ID', desc: '10-digit ID assigned by ODFI (often FEIN preceded by a code)' },
-    { start: 50, end: 53, name: 'SEC Code', fmt: (v) => describeSecCode(v), desc: 'Standard Entry Class code determines entry format and rules' },
-    { start: 53, end: 63, name: 'Entry Description', desc: 'Description shown on receiver\'s bank statement (e.g. PAYROLL)' },
-    { start: 63, end: 69, name: 'Descriptive Date', desc: 'Optional date for receiver display purposes' },
-    { start: 69, end: 75, name: 'Effective Entry Date', desc: 'Date entries settle to receiver accounts (YYMMDD)' },
-    { start: 75, end: 78, name: 'Settlement Date', desc: 'Inserted by ACH Operator, blank when originating (Julian day)' },
-    { start: 78, end: 79, name: 'Originator Status', desc: '1=Depository FI, 2=Federal Government, 0=ADV only' },
-    { start: 79, end: 87, name: 'Originating DFI', desc: 'First 8 digits of the originating institution\'s routing number' },
-    { start: 87, end: 94, name: 'Batch Number', desc: 'Ascending sequence number within the file' },
-  ];
-
-  const ENTRY_DETAIL_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "6" for Entry Detail' },
-    { start: 1, end: 3, name: 'Transaction Code', fmt: (v) => describeTransactionCode(v.trim()), desc: 'Determines account type (checking/savings) and direction (credit/debit)' },
-    { start: 3, end: 11, name: 'Receiving DFI', desc: 'First 8 digits of the receiver\'s bank routing number' },
-    { start: 11, end: 12, name: 'Check Digit', desc: 'Last digit of the routing number (used for validation)' },
-    { start: 12, end: 29, name: 'Account Number', desc: 'Receiver\'s bank account number (left-justified, space-padded)' },
-    { start: 29, end: 39, name: 'Amount', fmt: (v) => formatAmount(parseInt(v, 10) || 0), desc: 'Transaction amount in cents (zero-padded to 10 digits)' },
-    { start: 39, end: 54, name: 'Identification #', desc: 'Internal ID used by originator to identify this entry' },
-    { start: 54, end: 76, name: 'Receiver Name', desc: 'Name of the payment receiver (usually the account holder)' },
-    { start: 76, end: 78, name: 'Discretionary Data', desc: 'Optional 2-char code for ODFI use; WEB/TEL use as Payment Type Code' },
-    { start: 78, end: 79, name: 'Addenda Indicator', desc: '"1" = addenda record(s) follow, "0" = none' },
-    { start: 79, end: 94, name: 'Trace Number', desc: 'ODFI routing (8 digits) + sequence (7 digits); unique within batch' },
-  ];
-
-  const ADDENDA_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "7" for Addenda' },
-    { start: 1, end: 3, name: 'Addenda Type Code', desc: '"05" = payment-related info, "98" = change notification, "99" = return' },
-    { start: 3, end: 83, name: 'Payment Related Info', desc: 'Free-form text with supplemental payment details (up to 80 chars)' },
-    { start: 83, end: 87, name: 'Addenda Seq #', desc: 'Sequence number of this addenda within the entry (0001-9999)' },
-    { start: 87, end: 94, name: 'Entry Detail Seq #', desc: 'Last 7 digits of the related Entry Detail trace number' },
-  ];
-
-  const BATCH_CONTROL_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "8" for Batch Control' },
-    { start: 1, end: 4, name: 'Service Class Code', fmt: (v) => describeServiceClassCode(v.trim()), desc: 'Must match the Batch Header service class code' },
-    { start: 4, end: 10, name: 'Entry/Addenda Count', desc: 'Total count of type "6" and "7" records in this batch' },
-    { start: 10, end: 20, name: 'Entry Hash', desc: 'Sum of all Entry Detail receiving DFI routing numbers (mod 10^10)' },
-    { start: 20, end: 32, name: 'Total Debit', fmt: (v) => formatAmount(parseInt(v, 10) || 0), desc: 'Sum of all debit transaction amounts in this batch (in cents)' },
-    { start: 32, end: 44, name: 'Total Credit', fmt: (v) => formatAmount(parseInt(v, 10) || 0), desc: 'Sum of all credit transaction amounts in this batch (in cents)' },
-    { start: 44, end: 54, name: 'Company ID', desc: 'Must match the Batch Header company identification' },
-    { start: 54, end: 73, name: 'Message Auth Code', desc: 'Optional MAC for validating file integrity (usually blank)' },
-    { start: 73, end: 79, name: 'Reserved', desc: 'Reserved for future use (blank)' },
-    { start: 79, end: 87, name: 'Originating DFI', desc: 'Must match the Batch Header originating DFI' },
-    { start: 87, end: 94, name: 'Batch Number', desc: 'Must match the Batch Header batch number' },
-  ];
-
-  const FILE_CONTROL_FIELDS: FieldDef[] = [
-    { start: 0, end: 1, name: 'Record Type', desc: 'Always "9" for File Control' },
-    { start: 1, end: 7, name: 'Batch Count', desc: 'Total number of batches in the file' },
-    { start: 7, end: 13, name: 'Block Count', desc: 'Total lines in the file divided by blocking factor (10), rounded up' },
-    { start: 13, end: 21, name: 'Entry/Addenda Count', desc: 'Total count of type "6" and "7" records across all batches' },
-    { start: 21, end: 31, name: 'Entry Hash', desc: 'Sum of all batch Entry Hash totals (mod 10^10)' },
-    { start: 31, end: 43, name: 'Total Debit', fmt: (v) => formatAmount(parseInt(v, 10) || 0), desc: 'Sum of all batch Total Debit amounts (in cents)' },
-    { start: 43, end: 55, name: 'Total Credit', fmt: (v) => formatAmount(parseInt(v, 10) || 0), desc: 'Sum of all batch Total Credit amounts (in cents)' },
-    { start: 55, end: 94, name: 'Reserved', desc: 'Reserved for future use (blank)' },
-  ];
-
-  function getFieldDefs(type: string): FieldDef[] {
-    switch (type) {
-      case '1':
-        return FILE_HEADER_FIELDS;
-      case '5':
-        return BATCH_HEADER_FIELDS;
-      case '6':
-        return ENTRY_DETAIL_FIELDS;
-      case '7':
-        return ADDENDA_FIELDS;
-      case '8':
-        return BATCH_CONTROL_FIELDS;
-      case '9':
-        return FILE_CONTROL_FIELDS;
-      default:
-        return [];
-    }
-  }
-
-  // ── Render highlighted line ──
-  function renderLine(line: string, lineNum: number, errorLines?: Set<number>): string {
-    if (!line || line.length === 0) return '';
-    const type = line[0];
-    const isPadding = /^9+$/.test(line);
-    const hasError = errorLines?.has(lineNum) ?? false;
-    const errorCls = hasError ? ' rec-error' : '';
-
-    if (isPadding) {
-      return `<div class="record-line rec-padding${errorCls}" data-line="${lineNum}"><span class="line-num">${lineNum}</span><span class="line-content">${escapeHtml(line)}</span></div>`;
+    // ── Tab switching ──
+    function switchTab(tab: 'parse' | 'generate') {
+      const isParse = tab === 'parse';
+      tabParse.classList.toggle('active', isParse);
+      tabGenerate.classList.toggle('active', !isParse);
+      tabParse.setAttribute('aria-selected', String(isParse));
+      tabGenerate.setAttribute('aria-selected', String(!isParse));
+      panelParse.hidden = !isParse;
+      panelGenerate.hidden = isParse;
     }
 
-    const fields = getFieldDefs(type);
-    const label = RECORD_TYPE_LABELS[type] || 'Unknown';
-    const cls = `rec-${type}`;
+    tabParse.addEventListener('click', () => switchTab('parse'));
+    tabGenerate.addEventListener('click', () => switchTab('generate'));
 
-    let spans = '';
-    for (const f of fields) {
-      const raw = line.slice(f.start, f.end);
-      const fmtVal = f.fmt ? f.fmt(raw) : '';
-      spans += `<span class="field-span" data-field-name="${escapeHtml(f.name)}" data-field-pos="${f.start + 1}-${f.end}" data-field-raw="${escapeHtml(raw)}" data-field-val="${escapeHtml(fmtVal)}" data-field-desc="${escapeHtml(f.desc || '')}">${escapeHtml(raw)}</span>`;
-    }
-    if (line.length > 94) {
-      spans += `<span class="field-span">${escapeHtml(line.slice(94))}</span>`;
+    // ── Helpers ──
+    function escapeHtml(s: string): string {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    const errorMarker = hasError
-      ? '<span class="rec-error-marker">!</span>'
-      : '';
-
-    return `<div class="record-line ${cls}${errorCls}" data-line="${lineNum}"><span class="line-num">${lineNum}</span><span class="rec-badge">${type}</span>${errorMarker}<span class="rec-label">${label}</span><span class="line-fields">${spans}</span></div>`;
-  }
-
-  // ── Scroll to a line in the records view ──
-  function scrollToLine(lineNum: number) {
-    const el = recordsView.querySelector(`[data-line="${lineNum}"]`) as HTMLElement | null;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('rec-flash');
-      setTimeout(() => el.classList.remove('rec-flash'), 1500);
-    }
-  }
-
-  // ── Build error list HTML with clickable line references ──
-  function renderErrorItem(e: ValidationError): string {
-    const hintAttr = e.hint ? ` data-error-hint="${escapeHtml(e.hint)}"` : '';
-    const hintIcon = e.hint ? '<span class="error-hint-icon" aria-label="Hover for fix suggestion">?</span>' : '';
-    if (e.line) {
-      return `<li${hintAttr}><button class="error-line-btn" data-goto-line="${e.line}">line ${e.line}</button> ${escapeHtml(e.message)}${hintIcon}</li>`;
-    }
-    return `<li${hintAttr}><span class="error-bullet">●</span> ${escapeHtml(e.message)}${hintIcon}</li>`;
-  }
-
-  // ── Parse & display ──
-  function doParse() {
-    const raw = nachaInput.value.replace(/^\n+/, '').replace(/\n+$/, '');
-    if (!raw.trim()) {
-      parseSummary.hidden = true;
-      parseOutput.hidden = true;
-      parseErrors.hidden = true;
-      validationStatus.hidden = true;
-      currentParsed = null;
-      currentRaw = '';
-      return;
+    async function copyText(text: string, btn: HTMLButtonElement) {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = 'copied';
+      setTimeout(() => {
+        btn.textContent = orig;
+      }, 1200);
     }
 
-    currentRaw = raw;
-    currentParsed = parseNacha(raw);
-    const validationErrors = validateNacha(currentParsed);
-    const allErrors = [...currentParsed.errors, ...validationErrors];
-
-    // Collect line numbers that have errors
-    const errorLineNums = new Set<number>();
-    for (const e of allErrors) {
-      if (e.line) errorLineNums.add(e.line);
+    function downloadFile(content: string, filename: string) {
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     }
 
-    // Validation status banner
-    const isValid = allErrors.length === 0;
-    validationStatus.hidden = false;
-    validationStatus.className = `validation-status ${isValid ? 'status-valid' : 'status-invalid'}`;
-    statusIcon.textContent = isValid ? '✓' : '✗';
-    statusText.textContent = isValid ? 'valid nacha file' : 'invalid nacha file';
-    if (isValid) {
-      statusDetail.textContent = `${currentParsed.summary.totalBatches} batch${currentParsed.summary.totalBatches !== 1 ? 'es' : ''}, ${currentParsed.summary.totalEntries} entr${currentParsed.summary.totalEntries !== 1 ? 'ies' : 'y'} — all checks passed`;
-    } else {
-      statusDetail.textContent = `${allErrors.length} issue${allErrors.length !== 1 ? 's' : ''} found`;
+    // ── Record type label & color class ──
+    const RECORD_TYPE_LABELS: Record<string, string> = {
+      '1': 'File Header',
+      '5': 'Batch Header',
+      '6': 'Entry Detail',
+      '7': 'Addenda',
+      '8': 'Batch Control',
+      '9': 'File Control',
+    };
+
+    // ── Field layout per record type (position ranges, field name, optional formatter) ──
+    interface FieldDef {
+      start: number;
+      end: number;
+      name: string;
+      fmt?: (val: string) => string;
+      desc?: string;
     }
 
-    // Summary
-    const s = currentParsed.summary;
-    summaryGrid.innerHTML = `
+    const FILE_HEADER_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "1" for File Header' },
+      { start: 1, end: 3, name: 'Priority Code', desc: 'Always "01"' },
+      {
+        start: 3,
+        end: 13,
+        name: 'Immediate Destination',
+        desc: 'Routing number of the ACH Operator or receiving point',
+      },
+      { start: 13, end: 23, name: 'Immediate Origin', desc: 'Routing number of the sending point' },
+      { start: 23, end: 29, name: 'File Creation Date', desc: 'Date file was prepared (YYMMDD)' },
+      { start: 29, end: 33, name: 'File Creation Time', desc: 'Time file was created (HHmm)' },
+      {
+        start: 33,
+        end: 34,
+        name: 'File ID Modifier',
+        desc: 'Distinguishes between multiple files created on the same date (A-Z, 0-9)',
+      },
+      { start: 34, end: 37, name: 'Record Size', desc: 'Always "094"' },
+      { start: 37, end: 39, name: 'Blocking Factor', desc: 'Always "10"' },
+      { start: 39, end: 40, name: 'Format Code', desc: 'Always "1"' },
+      {
+        start: 40,
+        end: 63,
+        name: 'Destination Name',
+        desc: 'Name of the receiving ACH Operator or institution',
+      },
+      {
+        start: 63,
+        end: 86,
+        name: 'Origin Name',
+        desc: 'Name of the originating ACH Operator or institution',
+      },
+      {
+        start: 86,
+        end: 94,
+        name: 'Reference Code',
+        desc: "Optional field for originator's internal use",
+      },
+    ];
+
+    const BATCH_HEADER_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "5" for Batch Header' },
+      {
+        start: 1,
+        end: 4,
+        name: 'Service Class Code',
+        fmt: (v) => describeServiceClassCode(v.trim()),
+        desc: '200=Mixed, 220=Credits Only, 225=Debits Only',
+      },
+      {
+        start: 4,
+        end: 20,
+        name: 'Company Name',
+        desc: "Originator's company name, may appear on receiver's statement",
+      },
+      {
+        start: 20,
+        end: 40,
+        name: 'Discretionary Data',
+        desc: 'Optional field for originator/ODFI internal codes',
+      },
+      {
+        start: 40,
+        end: 50,
+        name: 'Company ID',
+        desc: '10-digit ID assigned by ODFI (often FEIN preceded by a code)',
+      },
+      {
+        start: 50,
+        end: 53,
+        name: 'SEC Code',
+        fmt: (v) => describeSecCode(v),
+        desc: 'Standard Entry Class code determines entry format and rules',
+      },
+      {
+        start: 53,
+        end: 63,
+        name: 'Entry Description',
+        desc: "Description shown on receiver's bank statement (e.g. PAYROLL)",
+      },
+      {
+        start: 63,
+        end: 69,
+        name: 'Descriptive Date',
+        desc: 'Optional date for receiver display purposes',
+      },
+      {
+        start: 69,
+        end: 75,
+        name: 'Effective Entry Date',
+        desc: 'Date entries settle to receiver accounts (YYMMDD)',
+      },
+      {
+        start: 75,
+        end: 78,
+        name: 'Settlement Date',
+        desc: 'Inserted by ACH Operator, blank when originating (Julian day)',
+      },
+      {
+        start: 78,
+        end: 79,
+        name: 'Originator Status',
+        desc: '1=Depository FI, 2=Federal Government, 0=ADV only',
+      },
+      {
+        start: 79,
+        end: 87,
+        name: 'Originating DFI',
+        desc: "First 8 digits of the originating institution's routing number",
+      },
+      {
+        start: 87,
+        end: 94,
+        name: 'Batch Number',
+        desc: 'Ascending sequence number within the file',
+      },
+    ];
+
+    const ENTRY_DETAIL_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "6" for Entry Detail' },
+      {
+        start: 1,
+        end: 3,
+        name: 'Transaction Code',
+        fmt: (v) => describeTransactionCode(v.trim()),
+        desc: 'Determines account type (checking/savings) and direction (credit/debit)',
+      },
+      {
+        start: 3,
+        end: 11,
+        name: 'Receiving DFI',
+        desc: "First 8 digits of the receiver's bank routing number",
+      },
+      {
+        start: 11,
+        end: 12,
+        name: 'Check Digit',
+        desc: 'Last digit of the routing number (used for validation)',
+      },
+      {
+        start: 12,
+        end: 29,
+        name: 'Account Number',
+        desc: "Receiver's bank account number (left-justified, space-padded)",
+      },
+      {
+        start: 29,
+        end: 39,
+        name: 'Amount',
+        fmt: (v) => formatAmount(parseInt(v, 10) || 0),
+        desc: 'Transaction amount in cents (zero-padded to 10 digits)',
+      },
+      {
+        start: 39,
+        end: 54,
+        name: 'Identification #',
+        desc: 'Internal ID used by originator to identify this entry',
+      },
+      {
+        start: 54,
+        end: 76,
+        name: 'Receiver Name',
+        desc: 'Name of the payment receiver (usually the account holder)',
+      },
+      {
+        start: 76,
+        end: 78,
+        name: 'Discretionary Data',
+        desc: 'Optional 2-char code for ODFI use; WEB/TEL use as Payment Type Code',
+      },
+      {
+        start: 78,
+        end: 79,
+        name: 'Addenda Indicator',
+        desc: '"1" = addenda record(s) follow, "0" = none',
+      },
+      {
+        start: 79,
+        end: 94,
+        name: 'Trace Number',
+        desc: 'ODFI routing (8 digits) + sequence (7 digits); unique within batch',
+      },
+    ];
+
+    const ADDENDA_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "7" for Addenda' },
+      {
+        start: 1,
+        end: 3,
+        name: 'Addenda Type Code',
+        desc: '"05" = payment-related info, "98" = change notification, "99" = return',
+      },
+      {
+        start: 3,
+        end: 83,
+        name: 'Payment Related Info',
+        desc: 'Free-form text with supplemental payment details (up to 80 chars)',
+      },
+      {
+        start: 83,
+        end: 87,
+        name: 'Addenda Seq #',
+        desc: 'Sequence number of this addenda within the entry (0001-9999)',
+      },
+      {
+        start: 87,
+        end: 94,
+        name: 'Entry Detail Seq #',
+        desc: 'Last 7 digits of the related Entry Detail trace number',
+      },
+    ];
+
+    const BATCH_CONTROL_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "8" for Batch Control' },
+      {
+        start: 1,
+        end: 4,
+        name: 'Service Class Code',
+        fmt: (v) => describeServiceClassCode(v.trim()),
+        desc: 'Must match the Batch Header service class code',
+      },
+      {
+        start: 4,
+        end: 10,
+        name: 'Entry/Addenda Count',
+        desc: 'Total count of type "6" and "7" records in this batch',
+      },
+      {
+        start: 10,
+        end: 20,
+        name: 'Entry Hash',
+        desc: 'Sum of all Entry Detail receiving DFI routing numbers (mod 10^10)',
+      },
+      {
+        start: 20,
+        end: 32,
+        name: 'Total Debit',
+        fmt: (v) => formatAmount(parseInt(v, 10) || 0),
+        desc: 'Sum of all debit transaction amounts in this batch (in cents)',
+      },
+      {
+        start: 32,
+        end: 44,
+        name: 'Total Credit',
+        fmt: (v) => formatAmount(parseInt(v, 10) || 0),
+        desc: 'Sum of all credit transaction amounts in this batch (in cents)',
+      },
+      {
+        start: 44,
+        end: 54,
+        name: 'Company ID',
+        desc: 'Must match the Batch Header company identification',
+      },
+      {
+        start: 54,
+        end: 73,
+        name: 'Message Auth Code',
+        desc: 'Optional MAC for validating file integrity (usually blank)',
+      },
+      { start: 73, end: 79, name: 'Reserved', desc: 'Reserved for future use (blank)' },
+      {
+        start: 79,
+        end: 87,
+        name: 'Originating DFI',
+        desc: 'Must match the Batch Header originating DFI',
+      },
+      {
+        start: 87,
+        end: 94,
+        name: 'Batch Number',
+        desc: 'Must match the Batch Header batch number',
+      },
+    ];
+
+    const FILE_CONTROL_FIELDS: FieldDef[] = [
+      { start: 0, end: 1, name: 'Record Type', desc: 'Always "9" for File Control' },
+      { start: 1, end: 7, name: 'Batch Count', desc: 'Total number of batches in the file' },
+      {
+        start: 7,
+        end: 13,
+        name: 'Block Count',
+        desc: 'Total lines in the file divided by blocking factor (10), rounded up',
+      },
+      {
+        start: 13,
+        end: 21,
+        name: 'Entry/Addenda Count',
+        desc: 'Total count of type "6" and "7" records across all batches',
+      },
+      {
+        start: 21,
+        end: 31,
+        name: 'Entry Hash',
+        desc: 'Sum of all batch Entry Hash totals (mod 10^10)',
+      },
+      {
+        start: 31,
+        end: 43,
+        name: 'Total Debit',
+        fmt: (v) => formatAmount(parseInt(v, 10) || 0),
+        desc: 'Sum of all batch Total Debit amounts (in cents)',
+      },
+      {
+        start: 43,
+        end: 55,
+        name: 'Total Credit',
+        fmt: (v) => formatAmount(parseInt(v, 10) || 0),
+        desc: 'Sum of all batch Total Credit amounts (in cents)',
+      },
+      { start: 55, end: 94, name: 'Reserved', desc: 'Reserved for future use (blank)' },
+    ];
+
+    function getFieldDefs(type: string): FieldDef[] {
+      switch (type) {
+        case '1':
+          return FILE_HEADER_FIELDS;
+        case '5':
+          return BATCH_HEADER_FIELDS;
+        case '6':
+          return ENTRY_DETAIL_FIELDS;
+        case '7':
+          return ADDENDA_FIELDS;
+        case '8':
+          return BATCH_CONTROL_FIELDS;
+        case '9':
+          return FILE_CONTROL_FIELDS;
+        default:
+          return [];
+      }
+    }
+
+    // ── Render highlighted line ──
+    function renderLine(line: string, lineNum: number, errorLines?: Set<number>): string {
+      if (!line || line.length === 0) return '';
+      const type = line[0];
+      const isPadding = /^9+$/.test(line);
+      const hasError = errorLines?.has(lineNum) ?? false;
+      const errorCls = hasError ? ' rec-error' : '';
+
+      if (isPadding) {
+        return `<div class="record-line rec-padding${errorCls}" data-line="${lineNum}"><span class="line-num">${lineNum}</span><span class="line-content">${escapeHtml(line)}</span></div>`;
+      }
+
+      const fields = getFieldDefs(type);
+      const label = RECORD_TYPE_LABELS[type] || 'Unknown';
+      const cls = `rec-${type}`;
+
+      let spans = '';
+      for (const f of fields) {
+        const raw = line.slice(f.start, f.end);
+        const fmtVal = f.fmt ? f.fmt(raw) : '';
+        spans += `<span class="field-span" data-field-name="${escapeHtml(f.name)}" data-field-pos="${f.start + 1}-${f.end}" data-field-raw="${escapeHtml(raw)}" data-field-val="${escapeHtml(fmtVal)}" data-field-desc="${escapeHtml(f.desc || '')}">${escapeHtml(raw)}</span>`;
+      }
+      if (line.length > 94) {
+        spans += `<span class="field-span">${escapeHtml(line.slice(94))}</span>`;
+      }
+
+      const errorMarker = hasError ? '<span class="rec-error-marker">!</span>' : '';
+
+      return `<div class="record-line ${cls}${errorCls}" data-line="${lineNum}"><span class="line-num">${lineNum}</span><span class="rec-badge">${type}</span>${errorMarker}<span class="rec-label">${label}</span><span class="line-fields">${spans}</span></div>`;
+    }
+
+    // ── Scroll to a line in the records view ──
+    function scrollToLine(lineNum: number) {
+      const el = recordsView.querySelector(`[data-line="${lineNum}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('rec-flash');
+        setTimeout(() => el.classList.remove('rec-flash'), 1500);
+      }
+    }
+
+    // ── Build error list HTML with clickable line references ──
+    function renderErrorItem(e: ValidationError): string {
+      const hintAttr = e.hint ? ` data-error-hint="${escapeHtml(e.hint)}"` : '';
+      const hintIcon = e.hint
+        ? '<span class="error-hint-icon" aria-label="Hover for fix suggestion">?</span>'
+        : '';
+      if (e.line) {
+        return `<li${hintAttr}><button class="error-line-btn" data-goto-line="${e.line}">line ${e.line}</button> ${escapeHtml(e.message)}${hintIcon}</li>`;
+      }
+      return `<li${hintAttr}><span class="error-bullet">●</span> ${escapeHtml(e.message)}${hintIcon}</li>`;
+    }
+
+    // ── Parse & display ──
+    function doParse() {
+      const raw = nachaInput.value.replace(/^\n+/, '').replace(/\n+$/, '');
+      if (!raw.trim()) {
+        parseSummary.hidden = true;
+        parseOutput.hidden = true;
+        parseErrors.hidden = true;
+        validationStatus.hidden = true;
+        currentParsed = null;
+        currentRaw = '';
+        return;
+      }
+
+      currentRaw = raw;
+      currentParsed = parseNacha(raw);
+      const validationErrors = validateNacha(currentParsed);
+      const allErrors = [...currentParsed.errors, ...validationErrors];
+
+      // Collect line numbers that have errors
+      const errorLineNums = new Set<number>();
+      for (const e of allErrors) {
+        if (e.line) errorLineNums.add(e.line);
+      }
+
+      // Validation status banner
+      const isValid = allErrors.length === 0;
+      validationStatus.hidden = false;
+      validationStatus.className = `validation-status ${isValid ? 'status-valid' : 'status-invalid'}`;
+      statusIcon.textContent = isValid ? '✓' : '✗';
+      statusText.textContent = isValid ? 'valid nacha file' : 'invalid nacha file';
+      if (isValid) {
+        statusDetail.textContent = `${currentParsed.summary.totalBatches} batch${currentParsed.summary.totalBatches !== 1 ? 'es' : ''}, ${currentParsed.summary.totalEntries} entr${currentParsed.summary.totalEntries !== 1 ? 'ies' : 'y'} — all checks passed`;
+      } else {
+        statusDetail.textContent = `${allErrors.length} issue${allErrors.length !== 1 ? 's' : ''} found`;
+      }
+
+      // Summary
+      const s = currentParsed.summary;
+      summaryGrid.innerHTML = `
       <div class="summary-item"><span class="summary-val">${escapeHtml(s.originName || '—')}</span><span class="summary-key">origin</span></div>
       <div class="summary-item"><span class="summary-val">${escapeHtml(s.destinationName || '—')}</span><span class="summary-key">destination</span></div>
       <div class="summary-item"><span class="summary-val">${escapeHtml(s.fileCreationDate || '—')}</span><span class="summary-key">created</span></div>
@@ -481,113 +721,113 @@
       <div class="summary-item"><span class="summary-val summary-debit">${escapeHtml(s.totalDebitDollars)}</span><span class="summary-key">total debits</span></div>
       <div class="summary-item"><span class="summary-val">${escapeHtml(s.secCodes.join(', ') || '—')}</span><span class="summary-key">SEC codes</span></div>
     `;
-    parseSummary.hidden = false;
+      parseSummary.hidden = false;
 
-    // Errors (shown before records so user sees them first)
-    if (allErrors.length > 0) {
-      errorCount.textContent = `${allErrors.length}`;
-      errorList.innerHTML = allErrors.map(renderErrorItem).join('');
-      parseErrors.hidden = false;
-    } else {
-      parseErrors.hidden = true;
+      // Errors (shown before records so user sees them first)
+      if (allErrors.length > 0) {
+        errorCount.textContent = `${allErrors.length}`;
+        errorList.innerHTML = allErrors.map(renderErrorItem).join('');
+        parseErrors.hidden = false;
+      } else {
+        parseErrors.hidden = true;
+      }
+
+      // Highlighted records (with error lines marked)
+      const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+      let html = '';
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].length === 0) continue;
+        html += renderLine(lines[i], i + 1, errorLineNums);
+      }
+      recordsView.innerHTML = html;
+      parseOutput.hidden = false;
     }
 
-    // Highlighted records (with error lines marked)
-    const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-    let html = '';
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].length === 0) continue;
-      html += renderLine(lines[i], i + 1, errorLineNums);
-    }
-    recordsView.innerHTML = html;
-    parseOutput.hidden = false;
-  }
-
-  // Delegated click handler for error line buttons
-  errorList.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('.error-line-btn') as HTMLElement | null;
-    if (btn?.dataset.gotoLine) {
-      scrollToLine(parseInt(btn.dataset.gotoLine, 10));
-    }
-  });
-
-  let debounceTimer: ReturnType<typeof setTimeout>;
-  nachaInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(doParse, 200);
-  });
-
-  // File upload / drag-drop
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    file.text().then((text) => {
-      nachaInput.value = text;
-      doParse();
+    // Delegated click handler for error line buttons
+    errorList.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.error-line-btn') as HTMLElement | null;
+      if (btn?.dataset.gotoLine) {
+        scrollToLine(parseInt(btn.dataset.gotoLine, 10));
+      }
     });
-    fileInput.value = '';
-  });
 
-  let dragCounter = 0;
-  dropZone.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    dragCounter++;
-    dropOverlay.hidden = false;
-  });
-  dropZone.addEventListener('dragleave', () => {
-    dragCounter--;
-    if (dragCounter <= 0) {
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    nachaInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(doParse, 200);
+    });
+
+    // File upload / drag-drop
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      file.text().then((text) => {
+        nachaInput.value = text;
+        doParse();
+      });
+      fileInput.value = '';
+    });
+
+    let dragCounter = 0;
+    dropZone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      dropOverlay.hidden = false;
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropOverlay.hidden = true;
+      }
+    });
+    dropZone.addEventListener('dragover', (e) => e.preventDefault());
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
       dragCounter = 0;
       dropOverlay.hidden = true;
-    }
-  });
-  dropZone.addEventListener('dragover', (e) => e.preventDefault());
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    dropOverlay.hidden = true;
-    const file = e.dataTransfer?.files[0];
-    if (!file) return;
-    file.text().then((text) => {
-      nachaInput.value = text;
+      const file = e.dataTransfer?.files[0];
+      if (!file) return;
+      file.text().then((text) => {
+        nachaInput.value = text;
+        doParse();
+      });
+    });
+
+    loadSampleBtn.addEventListener('click', () => {
+      nachaInput.value = SAMPLE_NACHA;
       doParse();
     });
-  });
 
-  loadSampleBtn.addEventListener('click', () => {
-    nachaInput.value = SAMPLE_NACHA;
-    doParse();
-  });
+    parseClearBtn.addEventListener('click', () => {
+      nachaInput.value = '';
+      validationStatus.hidden = true;
+      doParse();
+      nachaInput.focus();
+    });
 
-  parseClearBtn.addEventListener('click', () => {
-    nachaInput.value = '';
-    validationStatus.hidden = true;
-    doParse();
-    nachaInput.focus();
-  });
+    copyParsedBtn.addEventListener('click', () => copyText(currentRaw, copyParsedBtn));
+    downloadParsedBtn.addEventListener('click', () => {
+      if (currentRaw) downloadFile(currentRaw, 'nacha-file.ach');
+    });
 
-  copyParsedBtn.addEventListener('click', () => copyText(currentRaw, copyParsedBtn));
-  downloadParsedBtn.addEventListener('click', () => {
-    if (currentRaw) downloadFile(currentRaw, 'nacha-file.ach');
-  });
+    // ══════════════════════════════════════════════════════════════════
+    //  GENERATE TAB
+    // ══════════════════════════════════════════════════════════════════
 
-  // ══════════════════════════════════════════════════════════════════
-  //  GENERATE TAB
-  // ══════════════════════════════════════════════════════════════════
+    interface BatchState {
+      entries: EntryState[];
+    }
+    interface EntryState {
+      id: number;
+    }
 
-  interface BatchState {
-    entries: EntryState[];
-  }
-  interface EntryState {
-    id: number;
-  }
+    let batchStates: BatchState[] = [];
+    let entryIdCounter = 0;
 
-  let batchStates: BatchState[] = [];
-  let entryIdCounter = 0;
-
-  function createEntryHtml(batchIdx: number, entryId: number): string {
-    const prefix = `gen-b${batchIdx}-e${entryId}`;
-    return `<div class="gen-entry" data-entry-id="${entryId}">
+    function createEntryHtml(batchIdx: number, entryId: number): string {
+      const prefix = `gen-b${batchIdx}-e${entryId}`;
+      return `<div class="gen-entry" data-entry-id="${entryId}">
       <div class="gen-entry-header">
         <span class="section-label">entry</span>
         <button class="action-btn remove-entry-btn" data-batch="${batchIdx}" data-entry="${entryId}">remove</button>
@@ -632,10 +872,10 @@
         </div>
       </div>
     </div>`;
-  }
+    }
 
-  function createBatchHtml(batchIdx: number): string {
-    return `<div class="gen-batch" data-batch="${batchIdx}">
+    function createBatchHtml(batchIdx: number): string {
+      return `<div class="gen-batch" data-batch="${batchIdx}">
       <div class="gen-batch-header">
         <span class="section-label">batch ${batchIdx + 1}</span>
         <button class="action-btn remove-batch-btn" data-batch="${batchIdx}">remove batch</button>
@@ -681,314 +921,334 @@
         <button class="action-btn add-entry-btn" data-batch="${batchIdx}">+ add entry</button>
       </div>
     </div>`;
-  }
-
-  function addBatch() {
-    const batchIdx = batchStates.length;
-    batchStates.push({ entries: [] });
-    genBatches.insertAdjacentHTML('beforeend', createBatchHtml(batchIdx));
-    addEntry(batchIdx);
-  }
-
-  function addEntry(batchIdx: number) {
-    const entryId = entryIdCounter++;
-    batchStates[batchIdx].entries.push({ id: entryId });
-    const container = document.getElementById(`gen-b${batchIdx}-entries`);
-    if (container) {
-      container.insertAdjacentHTML('beforeend', createEntryHtml(batchIdx, entryId));
     }
-  }
 
-  function removeBatch(batchIdx: number) {
-    const el = genBatches.querySelector(`[data-batch="${batchIdx}"]`);
-    if (el) el.remove();
-    batchStates[batchIdx] = null!;
-  }
-
-  function removeEntry(batchIdx: number, entryId: number) {
-    const batch = batchStates[batchIdx];
-    if (!batch) return;
-    batch.entries = batch.entries.filter((e) => e.id !== entryId);
-    const el = genBatches.querySelector(`[data-entry-id="${entryId}"]`);
-    if (el) el.remove();
-  }
-
-  // Delegated click handlers for dynamic buttons
-  genBatches.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.classList.contains('add-entry-btn')) {
-      const bi = parseInt(target.dataset.batch!, 10);
-      addEntry(bi);
-    } else if (target.classList.contains('remove-entry-btn')) {
-      const bi = parseInt(target.dataset.batch!, 10);
-      const ei = parseInt(target.dataset.entry!, 10);
-      removeEntry(bi, ei);
-      updatePreview();
-    } else if (target.classList.contains('remove-batch-btn')) {
-      const bi = parseInt(target.dataset.batch!, 10);
-      removeBatch(bi);
-      updatePreview();
+    function addBatch() {
+      const batchIdx = batchStates.length;
+      batchStates.push({ entries: [] });
+      genBatches.insertAdjacentHTML('beforeend', createBatchHtml(batchIdx));
+      addEntry(batchIdx);
     }
-  });
 
-  genAddBatchBtn.addEventListener('click', () => {
-    addBatch();
-    updatePreview();
-  });
+    function addEntry(batchIdx: number) {
+      const entryId = entryIdCounter++;
+      batchStates[batchIdx].entries.push({ id: entryId });
+      const container = document.getElementById(`gen-b${batchIdx}-entries`);
+      if (container) {
+        container.insertAdjacentHTML('beforeend', createEntryHtml(batchIdx, entryId));
+      }
+    }
 
-  function getInputVal(id: string): string {
-    return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement)?.value ?? '';
-  }
+    function removeBatch(batchIdx: number) {
+      const el = genBatches.querySelector(`[data-batch="${batchIdx}"]`);
+      if (el) el.remove();
+      batchStates[batchIdx] = null!;
+    }
 
-  function gatherInput(): GeneratorInput | null {
-    const destRouting = getInputVal('gen-dest-routing').trim();
-    const originRouting = getInputVal('gen-origin-routing').trim();
-    if (!destRouting || !originRouting) return null;
+    function removeEntry(batchIdx: number, entryId: number) {
+      const batch = batchStates[batchIdx];
+      if (!batch) return;
+      batch.entries = batch.entries.filter((e) => e.id !== entryId);
+      const el = genBatches.querySelector(`[data-entry-id="${entryId}"]`);
+      if (el) el.remove();
+    }
 
-    const batches: GeneratorBatchInput[] = [];
-    for (let bi = 0; bi < batchStates.length; bi++) {
-      const bs = batchStates[bi];
-      if (!bs) continue;
-      const companyName = getInputVal(`gen-b${bi}-company`).trim();
-      const companyId = getInputVal(`gen-b${bi}-companyid`).trim();
-      if (!companyName || !companyId) continue;
+    // Delegated click handlers for dynamic buttons
+    genBatches.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('add-entry-btn')) {
+        const bi = parseInt(target.dataset.batch!, 10);
+        addEntry(bi);
+      } else if (target.classList.contains('remove-entry-btn')) {
+        const bi = parseInt(target.dataset.batch!, 10);
+        const ei = parseInt(target.dataset.entry!, 10);
+        removeEntry(bi, ei);
+        updatePreview();
+      } else if (target.classList.contains('remove-batch-btn')) {
+        const bi = parseInt(target.dataset.batch!, 10);
+        removeBatch(bi);
+        updatePreview();
+      }
+    });
 
-      const entries: GeneratorEntryInput[] = [];
-      for (const es of bs.entries) {
-        const prefix = `gen-b${bi}-e${es.id}`;
-        const routing = getInputVal(`${prefix}-routing`).trim();
-        const account = getInputVal(`${prefix}-account`).trim();
-        const amountStr = getInputVal(`${prefix}-amount`).trim();
-        const name = getInputVal(`${prefix}-name`).trim();
-        if (!routing || !account || !amountStr || !name) continue;
-        entries.push({
-          transactionCode: getInputVal(`${prefix}-tc`),
-          routingNumber: routing,
-          accountNumber: account,
-          amount: parseInt(amountStr, 10) || 0,
-          receiverName: name,
-          identificationNumber: getInputVal(`${prefix}-id`).trim() || undefined,
-          addendaInfo: getInputVal(`${prefix}-addenda`).trim() || undefined,
+    genAddBatchBtn.addEventListener('click', () => {
+      addBatch();
+      updatePreview();
+    });
+
+    function getInputVal(id: string): string {
+      return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement)?.value ?? '';
+    }
+
+    function gatherInput(): GeneratorInput | null {
+      const destRouting = getInputVal('gen-dest-routing').trim();
+      const originRouting = getInputVal('gen-origin-routing').trim();
+      if (!destRouting || !originRouting) return null;
+
+      const batches: GeneratorBatchInput[] = [];
+      for (let bi = 0; bi < batchStates.length; bi++) {
+        const bs = batchStates[bi];
+        if (!bs) continue;
+        const companyName = getInputVal(`gen-b${bi}-company`).trim();
+        const companyId = getInputVal(`gen-b${bi}-companyid`).trim();
+        if (!companyName || !companyId) continue;
+
+        const entries: GeneratorEntryInput[] = [];
+        for (const es of bs.entries) {
+          const prefix = `gen-b${bi}-e${es.id}`;
+          const routing = getInputVal(`${prefix}-routing`).trim();
+          const account = getInputVal(`${prefix}-account`).trim();
+          const amountStr = getInputVal(`${prefix}-amount`).trim();
+          const name = getInputVal(`${prefix}-name`).trim();
+          if (!routing || !account || !amountStr || !name) continue;
+          entries.push({
+            transactionCode: getInputVal(`${prefix}-tc`),
+            routingNumber: routing,
+            accountNumber: account,
+            amount: parseInt(amountStr, 10) || 0,
+            receiverName: name,
+            identificationNumber: getInputVal(`${prefix}-id`).trim() || undefined,
+            addendaInfo: getInputVal(`${prefix}-addenda`).trim() || undefined,
+          });
+        }
+        if (entries.length === 0) continue;
+
+        batches.push({
+          serviceClassCode: getInputVal(`gen-b${bi}-scc`),
+          companyName,
+          companyIdentification: companyId,
+          secCode: getInputVal(`gen-b${bi}-sec`),
+          companyEntryDescription: getInputVal(`gen-b${bi}-desc`).trim() || 'PAYMENT',
+          effectiveEntryDate: getInputVal(`gen-b${bi}-date`).trim(),
+          entries,
         });
       }
-      if (entries.length === 0) continue;
 
-      batches.push({
-        serviceClassCode: getInputVal(`gen-b${bi}-scc`),
-        companyName,
-        companyIdentification: companyId,
-        secCode: getInputVal(`gen-b${bi}-sec`),
-        companyEntryDescription: getInputVal(`gen-b${bi}-desc`).trim() || 'PAYMENT',
-        effectiveEntryDate: getInputVal(`gen-b${bi}-date`).trim(),
-        entries,
-      });
+      if (batches.length === 0) return null;
+
+      return {
+        immediateDestination: destRouting,
+        immediateOrigin: originRouting,
+        destinationName: getInputVal('gen-dest-name').trim(),
+        originName: getInputVal('gen-origin-name').trim(),
+        batches,
+      };
     }
 
-    if (batches.length === 0) return null;
+    let generatedContent = '';
 
-    return {
-      immediateDestination: destRouting,
-      immediateOrigin: originRouting,
-      destinationName: getInputVal('gen-dest-name').trim(),
-      originName: getInputVal('gen-origin-name').trim(),
-      batches,
-    };
-  }
-
-  let generatedContent = '';
-
-  function updatePreview() {
-    const input = gatherInput();
-    if (!input) {
-      genPreview.innerHTML =
-        '<span class="nacha-placeholder">fill in the fields above and add at least one batch with entries</span>';
-      genCopyBtn.disabled = true;
-      genDownloadBtn.disabled = true;
-      generatedContent = '';
-      return;
-    }
-
-    try {
-      generatedContent = generateNachaFile(input);
-      const lines = generatedContent.split('\n');
-      let html = '';
-      for (let i = 0; i < lines.length; i++) {
-        html += renderLine(lines[i], i + 1);
+    function updatePreview() {
+      const input = gatherInput();
+      if (!input) {
+        genPreview.innerHTML =
+          '<span class="nacha-placeholder">fill in the fields above and add at least one batch with entries</span>';
+        genCopyBtn.disabled = true;
+        genDownloadBtn.disabled = true;
+        generatedContent = '';
+        return;
       }
-      genPreview.innerHTML = html;
-      genCopyBtn.disabled = false;
-      genDownloadBtn.disabled = false;
-    } catch (err) {
-      genPreview.innerHTML = `<span class="gen-error">${escapeHtml((err as Error).message)}</span>`;
-      genCopyBtn.disabled = true;
-      genDownloadBtn.disabled = true;
-      generatedContent = '';
-    }
-  }
 
-  // Live update on any input change in the generate panel
-  panelGenerate.addEventListener('input', () => {
-    clearTimeout(genDebounce);
-    genDebounce = setTimeout(updatePreview, 250);
-  });
-  panelGenerate.addEventListener('change', () => {
-    clearTimeout(genDebounce);
-    genDebounce = setTimeout(updatePreview, 100);
-  });
-  let genDebounce: ReturnType<typeof setTimeout>;
-
-  genCopyBtn.addEventListener('click', () => copyText(generatedContent, genCopyBtn));
-  genDownloadBtn.addEventListener('click', () => {
-    if (generatedContent) downloadFile(generatedContent, 'generated.ach');
-  });
-
-  // Seed with one batch + one entry
-  addBatch();
-
-  // ── Field detail tooltip ──
-  const fieldTooltip = document.getElementById('field-tooltip') as HTMLDivElement;
-  const ftName = document.getElementById('ft-name') as HTMLDivElement;
-  const ftRaw = document.getElementById('ft-raw') as HTMLSpanElement;
-  const ftVal = document.getElementById('ft-val') as HTMLSpanElement;
-  const ftInterpretedRow = document.getElementById('ft-interpreted-row') as HTMLDivElement;
-  const ftPos = document.getElementById('ft-pos') as HTMLSpanElement;
-  const ftDesc = document.getElementById('ft-desc') as HTMLDivElement;
-
-  let tooltipTarget: HTMLElement | null = null;
-
-  function showFieldTooltip(span: HTMLElement) {
-    const name = span.dataset.fieldName;
-    if (!name) return;
-
-    tooltipTarget = span;
-    ftName.textContent = name;
-
-    const rawVal = span.dataset.fieldRaw ?? '';
-    ftRaw.textContent = rawVal.trim() || '(empty)';
-
-    const fmtVal = span.dataset.fieldVal ?? '';
-    if (fmtVal) {
-      ftVal.textContent = fmtVal;
-      ftInterpretedRow.hidden = false;
-    } else {
-      ftInterpretedRow.hidden = true;
+      try {
+        generatedContent = generateNachaFile(input);
+        const lines = generatedContent.split('\n');
+        let html = '';
+        for (let i = 0; i < lines.length; i++) {
+          html += renderLine(lines[i], i + 1);
+        }
+        genPreview.innerHTML = html;
+        genCopyBtn.disabled = false;
+        genDownloadBtn.disabled = false;
+      } catch (err) {
+        genPreview.innerHTML = `<span class="gen-error">${escapeHtml((err as Error).message)}</span>`;
+        genCopyBtn.disabled = true;
+        genDownloadBtn.disabled = true;
+        generatedContent = '';
+      }
     }
 
-    ftPos.textContent = `chars ${span.dataset.fieldPos ?? ''}`;
+    // Live update on any input change in the generate panel
+    panelGenerate.addEventListener('input', () => {
+      clearTimeout(genDebounce);
+      genDebounce = setTimeout(updatePreview, 250);
+    });
+    panelGenerate.addEventListener('change', () => {
+      clearTimeout(genDebounce);
+      genDebounce = setTimeout(updatePreview, 100);
+    });
+    let genDebounce: ReturnType<typeof setTimeout>;
 
-    const desc = span.dataset.fieldDesc ?? '';
-    if (desc) {
-      ftDesc.textContent = desc;
-      ftDesc.hidden = false;
-    } else {
-      ftDesc.hidden = true;
+    genCopyBtn.addEventListener('click', () => copyText(generatedContent, genCopyBtn));
+    genDownloadBtn.addEventListener('click', () => {
+      if (generatedContent) downloadFile(generatedContent, 'generated.ach');
+    });
+
+    // Seed with one batch + one entry
+    addBatch();
+
+    // ── Field detail tooltip ──
+    const fieldTooltip = document.getElementById('field-tooltip') as HTMLDivElement;
+    const ftName = document.getElementById('ft-name') as HTMLDivElement;
+    const ftRaw = document.getElementById('ft-raw') as HTMLSpanElement;
+    const ftVal = document.getElementById('ft-val') as HTMLSpanElement;
+    const ftInterpretedRow = document.getElementById('ft-interpreted-row') as HTMLDivElement;
+    const ftPos = document.getElementById('ft-pos') as HTMLSpanElement;
+    const ftDesc = document.getElementById('ft-desc') as HTMLDivElement;
+
+    let tooltipTarget: HTMLElement | null = null;
+
+    function showFieldTooltip(span: HTMLElement) {
+      const name = span.dataset.fieldName;
+      if (!name) return;
+
+      tooltipTarget = span;
+      ftName.textContent = name;
+
+      const rawVal = span.dataset.fieldRaw ?? '';
+      ftRaw.textContent = rawVal.trim() || '(empty)';
+
+      const fmtVal = span.dataset.fieldVal ?? '';
+      if (fmtVal) {
+        ftVal.textContent = fmtVal;
+        ftInterpretedRow.hidden = false;
+      } else {
+        ftInterpretedRow.hidden = true;
+      }
+
+      ftPos.textContent = `chars ${span.dataset.fieldPos ?? ''}`;
+
+      const desc = span.dataset.fieldDesc ?? '';
+      if (desc) {
+        ftDesc.textContent = desc;
+        ftDesc.hidden = false;
+      } else {
+        ftDesc.hidden = true;
+      }
+
+      fieldTooltip.hidden = false;
+      positionTooltip(span);
     }
 
-    fieldTooltip.hidden = false;
-    positionTooltip(span);
-  }
+    function positionTooltip(span: HTMLElement) {
+      const rect = span.getBoundingClientRect();
+      const ttRect = fieldTooltip.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
 
-  function positionTooltip(span: HTMLElement) {
-    const rect = span.getBoundingClientRect();
-    const ttRect = fieldTooltip.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+      let top = rect.bottom + 6;
+      let left = rect.left + rect.width / 2 - ttRect.width / 2;
 
-    let top = rect.bottom + 6;
-    let left = rect.left + rect.width / 2 - ttRect.width / 2;
+      if (top + ttRect.height > vh - 8) {
+        top = rect.top - ttRect.height - 6;
+      }
 
-    if (top + ttRect.height > vh - 8) {
-      top = rect.top - ttRect.height - 6;
+      if (left < 8) left = 8;
+      if (left + ttRect.width > vw - 8) left = vw - 8 - ttRect.width;
+
+      fieldTooltip.style.top = `${top}px`;
+      fieldTooltip.style.left = `${left}px`;
     }
 
-    if (left < 8) left = 8;
-    if (left + ttRect.width > vw - 8) left = vw - 8 - ttRect.width;
-
-    fieldTooltip.style.top = `${top}px`;
-    fieldTooltip.style.left = `${left}px`;
-  }
-
-  function hideFieldTooltip() {
-    fieldTooltip.hidden = true;
-    tooltipTarget = null;
-  }
-
-  document.addEventListener('mouseover', (e) => {
-    const span = (e.target as HTMLElement).closest('.field-span[data-field-name]') as HTMLElement | null;
-    if (span) {
-      showFieldTooltip(span);
-    } else if (tooltipTarget && !(e.target as HTMLElement).closest('#field-tooltip')) {
-      hideFieldTooltip();
+    function hideFieldTooltip() {
+      fieldTooltip.hidden = true;
+      tooltipTarget = null;
     }
-  }, { signal: _cleanup!.signal });
 
-  document.addEventListener('mouseout', (e) => {
-    const related = e.relatedTarget as HTMLElement | null;
-    if (tooltipTarget && !related?.closest('.field-span[data-field-name]') && !related?.closest('#field-tooltip')) {
-      hideFieldTooltip();
+    document.addEventListener(
+      'mouseover',
+      (e) => {
+        const span = (e.target as HTMLElement).closest(
+          '.field-span[data-field-name]',
+        ) as HTMLElement | null;
+        if (span) {
+          showFieldTooltip(span);
+        } else if (tooltipTarget && !(e.target as HTMLElement).closest('#field-tooltip')) {
+          hideFieldTooltip();
+        }
+      },
+      { signal: _cleanup!.signal },
+    );
+
+    document.addEventListener(
+      'mouseout',
+      (e) => {
+        const related = e.relatedTarget as HTMLElement | null;
+        if (
+          tooltipTarget &&
+          !related?.closest('.field-span[data-field-name]') &&
+          !related?.closest('#field-tooltip')
+        ) {
+          hideFieldTooltip();
+        }
+      },
+      { signal: _cleanup!.signal },
+    );
+
+    document.addEventListener('scroll', hideFieldTooltip, {
+      capture: true,
+      signal: _cleanup!.signal,
+    });
+
+    // ── Error hint tooltip ──
+    const errorHintTooltip = document.getElementById('error-hint-tooltip') as HTMLDivElement;
+    const ehtBody = document.getElementById('eht-body') as HTMLDivElement;
+    let errorHintTarget: HTMLElement | null = null;
+
+    function showErrorHint(li: HTMLElement) {
+      const hint = li.dataset.errorHint;
+      if (!hint) return;
+      errorHintTarget = li;
+      ehtBody.textContent = hint;
+      errorHintTooltip.hidden = false;
+      positionErrorHint(li);
     }
-  }, { signal: _cleanup!.signal });
 
-  document.addEventListener('scroll', hideFieldTooltip, { capture: true, signal: _cleanup!.signal });
+    function positionErrorHint(el: HTMLElement) {
+      const rect = el.getBoundingClientRect();
+      const ttRect = errorHintTooltip.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
 
-  // ── Error hint tooltip ──
-  const errorHintTooltip = document.getElementById('error-hint-tooltip') as HTMLDivElement;
-  const ehtBody = document.getElementById('eht-body') as HTMLDivElement;
-  let errorHintTarget: HTMLElement | null = null;
+      let top = rect.bottom + 4;
+      let left = rect.left;
 
-  function showErrorHint(li: HTMLElement) {
-    const hint = li.dataset.errorHint;
-    if (!hint) return;
-    errorHintTarget = li;
-    ehtBody.textContent = hint;
-    errorHintTooltip.hidden = false;
-    positionErrorHint(li);
-  }
+      if (top + ttRect.height > vh - 8) {
+        top = rect.top - ttRect.height - 4;
+      }
+      if (left < 8) left = 8;
+      if (left + ttRect.width > vw - 8) left = vw - 8 - ttRect.width;
 
-  function positionErrorHint(el: HTMLElement) {
-    const rect = el.getBoundingClientRect();
-    const ttRect = errorHintTooltip.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let top = rect.bottom + 4;
-    let left = rect.left;
-
-    if (top + ttRect.height > vh - 8) {
-      top = rect.top - ttRect.height - 4;
+      errorHintTooltip.style.top = `${top}px`;
+      errorHintTooltip.style.left = `${left}px`;
     }
-    if (left < 8) left = 8;
-    if (left + ttRect.width > vw - 8) left = vw - 8 - ttRect.width;
 
-    errorHintTooltip.style.top = `${top}px`;
-    errorHintTooltip.style.left = `${left}px`;
-  }
-
-  function hideErrorHint() {
-    errorHintTooltip.hidden = true;
-    errorHintTarget = null;
-  }
-
-  errorList.addEventListener('mouseover', (e) => {
-    const li = (e.target as HTMLElement).closest('li[data-error-hint]') as HTMLElement | null;
-    if (li && li !== errorHintTarget) {
-      showErrorHint(li);
+    function hideErrorHint() {
+      errorHintTooltip.hidden = true;
+      errorHintTarget = null;
     }
-  });
 
-  errorList.addEventListener('mouseleave', () => {
-    hideErrorHint();
-  });
+    errorList.addEventListener('mouseover', (e) => {
+      const li = (e.target as HTMLElement).closest('li[data-error-hint]') as HTMLElement | null;
+      if (li && li !== errorHintTarget) {
+        showErrorHint(li);
+      }
+    });
 
-  errorList.addEventListener('mouseout', (e) => {
-    const related = e.relatedTarget as HTMLElement | null;
-    if (errorHintTarget && !related?.closest('li[data-error-hint]') && !related?.closest('#error-hint-tooltip')) {
+    errorList.addEventListener('mouseleave', () => {
       hideErrorHint();
-    }
-  });
+    });
 
-  document.addEventListener('scroll', hideErrorHint, { capture: true, signal: _cleanup!.signal });
+    errorList.addEventListener('mouseout', (e) => {
+      const related = e.relatedTarget as HTMLElement | null;
+      if (
+        errorHintTarget &&
+        !related?.closest('li[data-error-hint]') &&
+        !related?.closest('#error-hint-tooltip')
+      ) {
+        hideErrorHint();
+      }
+    });
 
+    document.addEventListener('scroll', hideErrorHint, { capture: true, signal: _cleanup!.signal });
   } // end init
 
   document.addEventListener('astro:page-load', init);
@@ -1549,7 +1809,9 @@
     vertical-align: middle;
     cursor: help;
     flex-shrink: 0;
-    transition: color 0.1s, border-color 0.1s;
+    transition:
+      color 0.1s,
+      border-color 0.1s;
   }
 
   :global(li[data-error-hint]:hover .error-hint-icon) {

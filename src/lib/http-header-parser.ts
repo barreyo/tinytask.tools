@@ -6,23 +6,18 @@ export interface ParsedHeader {
 
 export const HEADER_EXPLANATIONS: Record<string, string> = {
   // ── Request headers ────────────────────────────────────────────────────────
-  accept:
-    'Media types the client is willing to receive (e.g. text/html, application/json).',
-  'accept-encoding':
-    'Compression encodings the client supports (e.g. gzip, br, deflate).',
-  'accept-language':
-    'Natural languages the client prefers, in priority order (e.g. en-US, fr).',
+  accept: 'Media types the client is willing to receive (e.g. text/html, application/json).',
+  'accept-encoding': 'Compression encodings the client supports (e.g. gzip, br, deflate).',
+  'accept-language': 'Natural languages the client prefers, in priority order (e.g. en-US, fr).',
   authorization:
     'Credentials for authenticating the client with the server (e.g. Bearer <token>, Basic <base64>).',
-  cookie:
-    'HTTP cookies previously set by the server, sent back on every request to that origin.',
+  cookie: 'HTTP cookies previously set by the server, sent back on every request to that origin.',
   host: 'Domain name (and optional port) of the server being addressed. Required in HTTP/1.1.',
   origin:
     'Origin (scheme + host + port) of the cross-origin request. Used in CORS preflight checks.',
   referer:
     'URL of the page that linked to the requested resource. Note: the header name is a historical misspelling of "referrer".',
-  'user-agent':
-    'String identifying the client software (browser, version, OS, rendering engine).',
+  'user-agent': 'String identifying the client software (browser, version, OS, rendering engine).',
   'if-none-match':
     'Conditional request: only return the resource if its ETag does not match this value (used for cache validation).',
   'if-modified-since':
@@ -46,8 +41,7 @@ export const HEADER_EXPLANATIONS: Record<string, string> = {
   'x-forwarded-for':
     'IP address(es) of the client and any intermediate proxies that forwarded the request.',
   'x-forwarded-host': 'Original Host header value as received by a reverse proxy.',
-  'x-forwarded-proto':
-    'Protocol (http or https) used by the client to reach the proxy.',
+  'x-forwarded-proto': 'Protocol (http or https) used by the client to reach the proxy.',
 
   // ── Response headers ───────────────────────────────────────────────────────
   'access-control-allow-origin':
@@ -103,7 +97,8 @@ export const HEADER_EXPLANATIONS: Record<string, string> = {
     '"nosniff" tells browsers not to MIME-sniff the content type — prevents certain injection attacks.',
   'x-frame-options':
     'Controls whether the page may be embedded in a frame. Values: DENY, SAMEORIGIN. Superseded by CSP frame-ancestors.',
-  'x-powered-by': 'Identifies the server-side technology (e.g. PHP/8.1). Often suppressed for security.',
+  'x-powered-by':
+    'Identifies the server-side technology (e.g. PHP/8.1). Often suppressed for security.',
   'x-request-id':
     'Unique identifier for the request, useful for correlating logs across services. Non-standard but widely used.',
   'x-xss-protection':

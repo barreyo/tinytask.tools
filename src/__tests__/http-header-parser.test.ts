@@ -176,7 +176,7 @@ describe('parseHeaders — realistic inputs', () => {
   it('parses a typical security header block', () => {
     const raw = [
       'Strict-Transport-Security: max-age=31536000; includeSubDomains',
-      'Content-Security-Policy: default-src \'self\'',
+      "Content-Security-Policy: default-src 'self'",
       'X-Frame-Options: SAMEORIGIN',
       'X-Content-Type-Options: nosniff',
       'Referrer-Policy: strict-origin-when-cross-origin',
