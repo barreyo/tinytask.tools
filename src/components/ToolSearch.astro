@@ -232,7 +232,7 @@ const { totalCount } = Astro.props;
 
     function handleSearchKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        if (!grid) return;
+        if (!grid || !document.contains(grid)) return;
         e.preventDefault();
         if (panel.classList.contains('is-open')) {
           input.focus();
@@ -241,7 +241,7 @@ const { totalCount } = Astro.props;
           openSearch();
         }
       }
-      if (e.key === 'Escape' && panel.classList.contains('is-open')) {
+      if (e.key === 'Escape' && document.contains(panel) && panel.classList.contains('is-open')) {
         e.preventDefault();
         closeSearch();
       }
