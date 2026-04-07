@@ -6,15 +6,39 @@ interface Props {
 }
 
 const { tool } = Astro.props;
+const tagsStr = (tool.tags ?? []).join(',');
 ---
 
-<a href={`/tools/${tool.slug}`} class="tool-card">
-  <h2 class="tool-name">{tool.name}</h2>
-  <p class="tool-desc">{tool.description}</p>
-</a>
+<div
+  class="tool-card-wrapper"
+  data-name={tool.name}
+  data-description={tool.description}
+  data-tags={tagsStr}
+>
+  <a href={`/tools/${tool.slug}`} class="tool-card">
+    <h2 class="tool-name">{tool.name}</h2>
+    <p class="tool-desc">{tool.description}</p>
+    <div class="tool-tags" hidden></div>
+  </a>
+</div>
 
 <style>
+  .tool-card-wrapper {
+    display: flex;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .tool-card-wrapper[data-hidden] {
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    visibility: hidden;
+  }
+
   .tool-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -22,7 +46,11 @@ const { tool } = Astro.props;
     border: 1px solid var(--border);
     text-decoration: none;
     color: inherit;
-    transition: border-color 0.1s;
+    transition:
+      border-color 0.1s,
+      opacity 0.1s;
+    width: 100%;
+    height: 100%;
   }
 
   .tool-card:hover {
@@ -37,10 +65,40 @@ const { tool } = Astro.props;
     letter-spacing: 0.02em;
   }
 
+  /* Characters highlighted by fuzzy match */
+  .tool-name :global(mark) {
+    background: transparent;
+    color: var(--fg);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   .tool-desc {
     margin: 0;
     font-size: 0.8rem;
     color: var(--fg-dim);
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  .tool-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+  }
+
+  .tool-tags[hidden] {
+    display: none;
+  }
+
+  .tool-tags :global(.tag-pill) {
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.1rem 0.3rem;
     line-height: 1.5;
   }
 </style>

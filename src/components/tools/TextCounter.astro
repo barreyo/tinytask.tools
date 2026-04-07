@@ -1,0 +1,385 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="text-counter-tool">
+  <!-- Textarea -->
+  <div class="input-section">
+    <div class="input-header">
+      <span class="section-label">text</span>
+      <div class="input-actions">
+        <button class="action-btn" id="copy-stats-btn">copy stats</button>
+        <button class="action-btn" id="clear-btn">clear</button>
+      </div>
+    </div>
+    <textarea
+      id="text-input"
+      class="text-area"
+      placeholder="Type or paste text…"
+      spellcheck="true"
+      rows="8"
+      aria-label="Text input"
+      aria-describedby="stats-grid"></textarea>
+  </div>
+
+  <!-- Stats grid -->
+  <div class="stats-section" id="stats-grid" aria-live="polite" aria-label="Text statistics">
+    <div class="stats-row">
+      <div class="stat-cell">
+        <span class="stat-label">characters</span>
+        <span class="stat-value" id="s-chars">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">no spaces</span>
+        <span class="stat-value" id="s-chars-ns">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">words</span>
+        <span class="stat-value" id="s-words">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">sentences</span>
+        <span class="stat-value" id="s-sentences">0</span>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-cell">
+        <span class="stat-label">paragraphs</span>
+        <span class="stat-value" id="s-paragraphs">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">lines</span>
+        <span class="stat-value" id="s-lines">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">bytes (utf-8)</span>
+        <span class="stat-value" id="s-bytes">0</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">sms segments</span>
+        <span class="stat-value stat-sms" id="s-sms">
+          <span id="s-sms-count">0</span>
+          <span class="sms-encoding" id="s-sms-enc"></span>
+        </span>
+      </div>
+    </div>
+    <div class="stats-row stats-row-time">
+      <div class="stat-cell stat-cell-wide">
+        <span class="stat-label">reading time</span>
+        <span class="stat-value" id="s-reading">—</span>
+      </div>
+      <div class="stat-cell stat-cell-wide">
+        <span class="stat-label">speaking time</span>
+        <span class="stat-value" id="s-speaking">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top keywords -->
+  <div class="keywords-section">
+    <div class="keywords-header">
+      <span class="section-label">top keywords</span>
+      <span class="keywords-note">(common stop words excluded)</span>
+    </div>
+    <div id="keywords-list" class="keywords-list" aria-live="polite">
+      <span class="keywords-empty">no words yet</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { countStats, topKeywords, formatTime } from '../../lib/text-counter';
+
+  const textInput = document.getElementById('text-input') as HTMLTextAreaElement;
+  const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement;
+  const copyStatsBtn = document.getElementById('copy-stats-btn') as HTMLButtonElement;
+  const keywordsList = document.getElementById('keywords-list') as HTMLDivElement;
+
+  function update(): void {
+    const text = textInput.value;
+    const stats = countStats(text);
+
+    (document.getElementById('s-chars') as HTMLElement).textContent =
+      stats.characters.toLocaleString();
+    (document.getElementById('s-chars-ns') as HTMLElement).textContent =
+      stats.charactersNoSpaces.toLocaleString();
+    (document.getElementById('s-words') as HTMLElement).textContent = stats.words.toLocaleString();
+    (document.getElementById('s-sentences') as HTMLElement).textContent =
+      stats.sentences.toLocaleString();
+    (document.getElementById('s-paragraphs') as HTMLElement).textContent =
+      stats.paragraphs.toLocaleString();
+    (document.getElementById('s-lines') as HTMLElement).textContent = stats.lines.toLocaleString();
+    (document.getElementById('s-bytes') as HTMLElement).textContent = stats.bytes.toLocaleString();
+    (document.getElementById('s-sms-count') as HTMLElement).textContent = String(stats.smsSegments);
+    (document.getElementById('s-sms-enc') as HTMLElement).textContent =
+      stats.smsEncoding === 'empty' ? '' : stats.smsEncoding;
+    (document.getElementById('s-reading') as HTMLElement).textContent =
+      stats.words === 0 ? '—' : formatTime(stats.readingTimeSec);
+    (document.getElementById('s-speaking') as HTMLElement).textContent =
+      stats.words === 0 ? '—' : formatTime(stats.speakingTimeSec);
+
+    // Keywords
+    const kw = topKeywords(text, 10);
+    if (kw.length === 0) {
+      keywordsList.innerHTML = '<span class="keywords-empty">no words yet</span>';
+    } else {
+      keywordsList.innerHTML = kw
+        .map(
+          (k) =>
+            `<span class="kw-item"><span class="kw-word">${k.word}</span><span class="kw-count">${k.count}</span></span>`,
+        )
+        .join('');
+    }
+  }
+
+  textInput.addEventListener('input', update);
+
+  clearBtn.addEventListener('click', () => {
+    textInput.value = '';
+    update();
+    textInput.focus();
+  });
+
+  copyStatsBtn.addEventListener('click', async () => {
+    const text = textInput.value;
+    const stats = countStats(text);
+    const summary = [
+      `Characters: ${stats.characters}`,
+      `Characters (no spaces): ${stats.charactersNoSpaces}`,
+      `Words: ${stats.words}`,
+      `Sentences: ${stats.sentences}`,
+      `Paragraphs: ${stats.paragraphs}`,
+      `Lines: ${stats.lines}`,
+      `Bytes (UTF-8): ${stats.bytes}`,
+      `Reading time: ${stats.words === 0 ? '—' : formatTime(stats.readingTimeSec)}`,
+      `Speaking time: ${stats.words === 0 ? '—' : formatTime(stats.speakingTimeSec)}`,
+      `SMS segments: ${stats.smsSegments} (${stats.smsEncoding})`,
+    ].join('\n');
+
+    await navigator.clipboard.writeText(summary);
+    copyStatsBtn.textContent = 'copied';
+    setTimeout(() => (copyStatsBtn.textContent = 'copy stats'), 1200);
+  });
+
+  // Init
+  update();
+</script>
+
+<style>
+  .text-counter-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Input section ──────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .input-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .text-area {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .text-area::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .text-area:focus {
+    outline: none;
+  }
+
+  /* ── Stats grid ─────────────────────────────────────────────────────────── */
+  .stats-section {
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stats-row:last-child {
+    border-bottom: none;
+  }
+
+  .stats-row-time {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.65rem 0.75rem;
+    border-right: 1px solid var(--border);
+  }
+
+  .stat-cell:last-child {
+    border-right: none;
+  }
+
+  .stat-cell-wide {
+    /* Used in the 2-column time row */
+  }
+
+  .stat-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+    color: var(--fg);
+    letter-spacing: 0.01em;
+  }
+
+  .stat-sms {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+
+  .sms-encoding {
+    font-size: 0.62rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  @media (max-width: 480px) {
+    .stats-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stats-row-time {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stat-cell:nth-child(2n) {
+      border-right: none;
+    }
+
+    .stat-cell:nth-child(odd) {
+      border-right: 1px solid var(--border);
+    }
+  }
+
+  /* ── Keywords section ───────────────────────────────────────────────────── */
+  .keywords-section {
+    border: 1px solid var(--border);
+  }
+
+  .keywords-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .keywords-note {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .keywords-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    min-height: 2.5rem;
+  }
+
+  .keywords-empty {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.kw-item) {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.5rem;
+  }
+
+  :global(.kw-word) {
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+  }
+
+  :global(.kw-count) {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+    border-left: 1px solid var(--border);
+    padding-left: 0.3rem;
+  }
+
+  /* ── Shared ─────────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+</style>

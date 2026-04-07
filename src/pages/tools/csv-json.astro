@@ -1,0 +1,15 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import CsvJson from '../../components/tools/CsvJson.astro';
+---
+
+<ToolLayout slug="csv-json">
+  <CsvJson />
+</ToolLayout>
+
+<style is:global>
+  body:has(#csv-input) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

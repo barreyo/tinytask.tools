@@ -1,0 +1,362 @@
+---
+interface Props {
+  totalCount: number;
+}
+
+const { totalCount } = Astro.props;
+---
+
+<div class="search-backdrop" id="search-backdrop" aria-hidden="true"></div>
+
+<div
+  class="search-panel"
+  id="search-panel"
+  role="search"
+  aria-label="Find a tool"
+  aria-hidden="true"
+>
+  <div class="search-row">
+    <span class="prompt" aria-hidden="true">&gt;</span>
+    <input
+      id="tool-search"
+      class="search-input"
+      type="search"
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+      aria-label="Search tools"
+      placeholder="find a tool…"
+    />
+    <kbd class="shortcut-hint">esc</kbd>
+  </div>
+  <p class="search-status" id="search-status" aria-live="polite" aria-atomic="true">
+    {totalCount} tools
+  </p>
+</div>
+
+<script define:vars={{ totalCount }}>
+  function initSearch() {
+    const panel = document.getElementById('search-panel');
+    const backdrop = document.getElementById('search-backdrop');
+    const input = document.getElementById('tool-search');
+    const status = document.getElementById('search-status');
+    const grid = document.querySelector('.tool-grid');
+
+    // ── Open / close ────────────────────────────────────────────────────────
+
+    function openSearch() {
+      panel.classList.add('is-open');
+      backdrop.classList.add('is-open');
+      panel.setAttribute('aria-hidden', 'false');
+      input.focus();
+      input.select();
+    }
+
+    function closeSearch() {
+      panel.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      panel.setAttribute('aria-hidden', 'true');
+      input.value = '';
+      runSearch('');
+      history.replaceState(null, '', window.location.pathname);
+    }
+
+    backdrop.addEventListener('click', closeSearch);
+
+    // ── Fuzzy (subsequence) match — names only ───────────────────────────────
+
+    function fuzzyMatch(query, target) {
+      const q = query.toLowerCase();
+      const t = target.toLowerCase();
+      let qi = 0;
+      const positions = [];
+      for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+        if (t[ti] === q[qi]) {
+          positions.push(ti);
+          qi++;
+        }
+      }
+      if (qi < q.length) return null;
+      let score = 0;
+      let consecutive = 1;
+      for (let i = 1; i < positions.length; i++) {
+        if (positions[i] === positions[i - 1] + 1) {
+          consecutive++;
+          score += consecutive * 2;
+        } else {
+          consecutive = 1;
+          score += 1;
+        }
+      }
+      score -= positions[0] * 0.5;
+      return { positions, score };
+    }
+
+    // ── Substring match — descriptions and tags ──────────────────────────────
+
+    function substringMatch(query, target) {
+      const q = query.toLowerCase();
+      const t = target.toLowerCase();
+      const idx = t.indexOf(q);
+      if (idx === -1) return null;
+      return { score: 10 - idx * 0.1 };
+    }
+
+    function highlightName(name, positions) {
+      if (!positions || positions.length === 0) return name;
+      let result = '';
+      for (let i = 0; i < name.length; i++) {
+        result += positions.includes(i) ? `<mark>${name[i]}</mark>` : name[i];
+      }
+      return result;
+    }
+
+    // ── Filter ───────────────────────────────────────────────────────────────
+
+    function runSearch(query) {
+      const cards = Array.from(grid.querySelectorAll('.tool-card-wrapper'));
+      const q = query.trim();
+      let visibleCount = 0;
+      const scored = [];
+
+      for (const wrapper of cards) {
+        const name = wrapper.dataset.name ?? '';
+        const desc = wrapper.dataset.description ?? '';
+        const tags = (wrapper.dataset.tags ?? '').split(',').filter(Boolean);
+
+        if (!q) {
+          wrapper.removeAttribute('data-hidden');
+          wrapper.style.order = '';
+          const nameEl = wrapper.querySelector('.tool-name');
+          if (nameEl) nameEl.innerHTML = name;
+          const tagsList = wrapper.querySelector('.tool-tags');
+          if (tagsList) tagsList.setAttribute('hidden', '');
+          visibleCount++;
+          continue;
+        }
+
+        const nameMatch = fuzzyMatch(q, name);
+        const descMatch = substringMatch(q, desc);
+        const tagMatches = tags
+          .map((tag) => ({ tag, result: substringMatch(q, tag) }))
+          .filter((t) => t.result !== null);
+
+        const bestScore = Math.max(
+          nameMatch ? nameMatch.score * 3 : -Infinity,
+          descMatch ? descMatch.score * 1 : -Infinity,
+          ...tagMatches.map((t) => t.result.score * 2),
+        );
+
+        if (bestScore === -Infinity) {
+          wrapper.setAttribute('data-hidden', '');
+          wrapper.style.order = '';
+          const nameEl = wrapper.querySelector('.tool-name');
+          if (nameEl) nameEl.textContent = name;
+          const tagsList = wrapper.querySelector('.tool-tags');
+          if (tagsList) tagsList.setAttribute('hidden', '');
+        } else {
+          wrapper.removeAttribute('data-hidden');
+          scored.push({ wrapper, score: bestScore, nameMatch, tagMatches });
+          visibleCount++;
+        }
+      }
+
+      const sorted = [...scored].sort((a, b) => b.score - a.score);
+      sorted.forEach(({ wrapper, nameMatch, tagMatches }, i) => {
+        wrapper.style.order = String(i);
+        const nameEl = wrapper.querySelector('.tool-name');
+        const name = wrapper.dataset.name ?? '';
+        if (nameEl) {
+          nameEl.innerHTML = nameMatch ? highlightName(name, nameMatch.positions) : name;
+        }
+        const tagsList = wrapper.querySelector('.tool-tags');
+        if (tagsList) {
+          if (tagMatches.length > 0) {
+            tagsList.removeAttribute('hidden');
+            tagsList.innerHTML = tagMatches
+              .map((t) => `<span class="tag-pill">${t.tag}</span>`)
+              .join('');
+          } else {
+            tagsList.setAttribute('hidden', '');
+          }
+        }
+      });
+
+      if (!q) {
+        status.textContent = `${totalCount} tools`;
+      } else if (visibleCount === 0) {
+        status.textContent = `no matches`;
+      } else {
+        status.textContent = `${visibleCount} of ${totalCount} tools`;
+      }
+
+      return visibleCount;
+    }
+
+    // ── Initialise from URL param ─────────────────────────────────────────────
+
+    const params = new URLSearchParams(window.location.search);
+    const initialQ = params.get('q') ?? '';
+    if (initialQ) {
+      input.value = initialQ;
+      runSearch(initialQ);
+      openSearch();
+    }
+
+    // ── Input handlers ───────────────────────────────────────────────────────
+
+    input.addEventListener('input', () => {
+      runSearch(input.value);
+      const url = new URL(window.location.href);
+      if (input.value.trim()) {
+        url.searchParams.set('q', input.value.trim());
+      } else {
+        url.searchParams.delete('q');
+      }
+      history.replaceState(null, '', url.toString());
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const visible = Array.from(
+          grid.querySelectorAll('.tool-card-wrapper:not([data-hidden]) a'),
+        );
+        if (visible.length === 1) visible[0].click();
+      }
+      if (e.key === 'Escape') {
+        closeSearch();
+      }
+    });
+
+    // ── Global shortcuts ──────────────────────────────────────────────────────
+
+    function handleSearchKeydown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        if (!grid) return;
+        e.preventDefault();
+        if (panel.classList.contains('is-open')) {
+          input.focus();
+          input.select();
+        } else {
+          openSearch();
+        }
+      }
+      if (e.key === 'Escape' && panel.classList.contains('is-open')) {
+        e.preventDefault();
+        closeSearch();
+      }
+    }
+
+    // Remove stale listener from prior navigation, then re-add
+    document.removeEventListener('keydown', window.__searchKeydownHandler);
+    window.__searchKeydownHandler = handleSearchKeydown;
+    document.addEventListener('keydown', handleSearchKeydown);
+  } // end initSearch
+
+  document.addEventListener('astro:page-load', initSearch);
+</script>
+
+<style>
+  /* ── Backdrop ─────────────────────────────────────────────────────────────── */
+  .search-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: transparent;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .search-backdrop.is-open {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  /* ── Panel ────────────────────────────────────────────────────────────────── */
+  .search-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+
+    /* Hidden state */
+    opacity: 0;
+    transform: translateY(-100%);
+    pointer-events: none;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .search-panel.is-open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* ── Inner layout ─────────────────────────────────────────────────────────── */
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .prompt {
+    color: var(--fg-dim);
+    font-size: 1rem;
+    line-height: 1;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    padding: 0;
+    caret-color: var(--fg);
+    min-width: 0;
+  }
+
+  .search-input::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.6;
+  }
+
+  .search-input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .shortcut-hint {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.35rem;
+    line-height: 1.4;
+    background: transparent;
+    user-select: none;
+    flex-shrink: 0;
+    cursor: default;
+  }
+
+  .search-status {
+    margin: 0;
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    min-height: 1em;
+  }
+</style>

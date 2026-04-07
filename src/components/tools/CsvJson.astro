@@ -1,0 +1,467 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="csv-json-tool">
+  <!-- Options bar -->
+  <div class="options-bar">
+    <div class="option-group">
+      <span class="pane-label">delimiter</span>
+      <select id="delimiter-select" class="select-input">
+        <option value="">auto</option>
+        <option value=",">, comma</option>
+        <option value="	">⇥ tab</option>
+        <option value=";">; semicolon</option>
+        <option value="|">| pipe</option>
+      </select>
+    </div>
+    <label class="toggle-label">
+      <input type="checkbox" id="header-toggle" checked />
+      <span>first row is header</span>
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="skip-empty-toggle" checked />
+      <span>skip empty lines</span>
+    </label>
+  </div>
+
+  <!-- Main panes -->
+  <div class="panes">
+    <!-- CSV pane -->
+    <div class="pane" id="csv-pane">
+      <div class="pane-header">
+        <span class="pane-label">csv</span>
+        <div class="pane-actions">
+          <button class="action-btn" id="csv-copy-btn" disabled>copy</button>
+          <button class="action-btn" id="csv-download-btn" disabled>download</button>
+          <button class="action-btn" id="csv-clear-btn">clear</button>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <textarea
+          id="csv-input"
+          class="editor-textarea"
+          placeholder="Paste CSV here…"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"></textarea>
+      </div>
+    </div>
+
+    <!-- Direction controls -->
+    <div class="direction-controls">
+      <button class="action-btn dir-btn primary" id="to-json-btn">csv → json</button>
+      <button class="action-btn dir-btn" id="to-csv-btn">json → csv</button>
+    </div>
+
+    <!-- JSON pane -->
+    <div class="pane" id="json-pane">
+      <div class="pane-header">
+        <span class="pane-label">json</span>
+        <div class="pane-actions">
+          <button class="action-btn" id="json-copy-btn" disabled>copy</button>
+          <button class="action-btn" id="json-download-btn" disabled>download</button>
+          <button class="action-btn" id="json-clear-btn">clear</button>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <textarea
+          id="json-input"
+          class="editor-textarea"
+          placeholder="Paste JSON array here…"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error display -->
+  <div id="error-display" class="error-display" hidden>
+    <span class="pane-label">errors</span>
+    <ul id="error-list" class="error-list"></ul>
+  </div>
+</div>
+
+<script>
+  import { csvToJson, jsonToCsv } from '../../lib/csv-json';
+
+  type Direction = 'csv-to-json' | 'json-to-csv';
+
+  const csvInput = document.getElementById('csv-input') as HTMLTextAreaElement;
+  const jsonInput = document.getElementById('json-input') as HTMLTextAreaElement;
+  const delimiterSelect = document.getElementById('delimiter-select') as HTMLSelectElement;
+  const headerToggle = document.getElementById('header-toggle') as HTMLInputElement;
+  const skipEmptyToggle = document.getElementById('skip-empty-toggle') as HTMLInputElement;
+  const toJsonBtn = document.getElementById('to-json-btn') as HTMLButtonElement;
+  const toCsvBtn = document.getElementById('to-csv-btn') as HTMLButtonElement;
+  const csvCopyBtn = document.getElementById('csv-copy-btn') as HTMLButtonElement;
+  const csvDownloadBtn = document.getElementById('csv-download-btn') as HTMLButtonElement;
+  const csvClearBtn = document.getElementById('csv-clear-btn') as HTMLButtonElement;
+  const jsonCopyBtn = document.getElementById('json-copy-btn') as HTMLButtonElement;
+  const jsonDownloadBtn = document.getElementById('json-download-btn') as HTMLButtonElement;
+  const jsonClearBtn = document.getElementById('json-clear-btn') as HTMLButtonElement;
+  const errorDisplay = document.getElementById('error-display') as HTMLDivElement;
+  const errorList = document.getElementById('error-list') as HTMLUListElement;
+
+  let direction: Direction = 'csv-to-json';
+
+  // ── Direction button state ─────────────────────────────────────────────────
+  function setDirection(dir: Direction): void {
+    direction = dir;
+    toJsonBtn.classList.toggle('primary', dir === 'csv-to-json');
+    toCsvBtn.classList.toggle('primary', dir === 'json-to-csv');
+  }
+
+  setDirection('csv-to-json');
+
+  // ── Errors ─────────────────────────────────────────────────────────────────
+  function showErrors(errors: string[]): void {
+    errorDisplay.hidden = errors.length === 0;
+    errorList.innerHTML = errors.map((e) => `<li>${e}</li>`).join('');
+  }
+
+  // ── Core conversion ────────────────────────────────────────────────────────
+  function process(): void {
+    showErrors([]);
+
+    if (direction === 'csv-to-json') {
+      const csv = csvInput.value;
+      if (!csv.trim()) {
+        jsonInput.value = '';
+        jsonCopyBtn.disabled = true;
+        jsonDownloadBtn.disabled = true;
+        return;
+      }
+      try {
+        const result = csvToJson(csv, {
+          delimiter: delimiterSelect.value,
+          header: headerToggle.checked,
+          skipEmpty: skipEmptyToggle.checked,
+        });
+        showErrors(result.errors);
+        jsonInput.value = JSON.stringify(result.data, null, 2);
+        jsonCopyBtn.disabled = false;
+        jsonDownloadBtn.disabled = false;
+      } catch (err) {
+        showErrors([(err as Error).message]);
+      }
+    } else {
+      const json = jsonInput.value;
+      if (!json.trim()) {
+        csvInput.value = '';
+        csvCopyBtn.disabled = true;
+        csvDownloadBtn.disabled = true;
+        return;
+      }
+      try {
+        const result = jsonToCsv(json, {
+          delimiter: delimiterSelect.value || ',',
+          header: headerToggle.checked,
+        });
+        showErrors(result.errors);
+        if (result.errors.length === 0) {
+          csvInput.value = result.data as string;
+          csvCopyBtn.disabled = false;
+          csvDownloadBtn.disabled = false;
+        }
+      } catch (err) {
+        showErrors([(err as Error).message]);
+      }
+    }
+  }
+
+  // ── Direction buttons ──────────────────────────────────────────────────────
+  toJsonBtn.addEventListener('click', () => {
+    setDirection('csv-to-json');
+    process();
+  });
+
+  toCsvBtn.addEventListener('click', () => {
+    setDirection('json-to-csv');
+    process();
+  });
+
+  // ── Auto-convert on input (debounced, like the YAML tool) ──────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function scheduleProcess(): void {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  }
+
+  csvInput.addEventListener('input', () => {
+    if (direction === 'csv-to-json') scheduleProcess();
+  });
+
+  jsonInput.addEventListener('input', () => {
+    if (direction === 'json-to-csv') scheduleProcess();
+  });
+
+  // Re-run on option changes
+  delimiterSelect.addEventListener('change', process);
+  headerToggle.addEventListener('change', process);
+  skipEmptyToggle.addEventListener('change', process);
+
+  // ── Copy ───────────────────────────────────────────────────────────────────
+  async function copyText(btn: HTMLButtonElement, getText: () => string): Promise<void> {
+    const text = getText();
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'copied';
+    setTimeout(() => (btn.textContent = 'copy'), 1200);
+  }
+
+  csvCopyBtn.addEventListener('click', () => copyText(csvCopyBtn, () => csvInput.value));
+  jsonCopyBtn.addEventListener('click', () => copyText(jsonCopyBtn, () => jsonInput.value));
+
+  // ── Clear ──────────────────────────────────────────────────────────────────
+  csvClearBtn.addEventListener('click', () => {
+    csvInput.value = '';
+    jsonInput.value = '';
+    csvCopyBtn.disabled = true;
+    csvDownloadBtn.disabled = true;
+    jsonCopyBtn.disabled = true;
+    jsonDownloadBtn.disabled = true;
+    showErrors([]);
+  });
+
+  jsonClearBtn.addEventListener('click', () => {
+    csvInput.value = '';
+    jsonInput.value = '';
+    csvCopyBtn.disabled = true;
+    csvDownloadBtn.disabled = true;
+    jsonCopyBtn.disabled = true;
+    jsonDownloadBtn.disabled = true;
+    showErrors([]);
+  });
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  function download(content: string, filename: string, mime: string): void {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  csvDownloadBtn.addEventListener('click', () => download(csvInput.value, 'data.csv', 'text/csv'));
+  jsonDownloadBtn.addEventListener('click', () =>
+    download(jsonInput.value, 'data.json', 'application/json'),
+  );
+</script>
+
+<style>
+  .csv-json-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  /* ── Options bar ──────────────────────────────────────────────────────────── */
+  .options-bar {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  .option-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .select-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .select-input:focus {
+    outline: 1px solid var(--border-active);
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    cursor: pointer;
+  }
+
+  .toggle-label input[type='checkbox'] {
+    accent-color: var(--fg);
+    cursor: pointer;
+  }
+
+  /* ── Panes ────────────────────────────────────────────────────────────────── */
+  .panes {
+    display: flex;
+    flex: 1;
+    gap: 1.5rem;
+    min-height: 0;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Editor wrap — mirrors .yj-editor-wrap ────────────────────────────────── */
+  .editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .editor-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+    box-sizing: border-box;
+  }
+
+  .editor-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  /* ── Direction controls ───────────────────────────────────────────────────── */
+  .direction-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Error display ────────────────────────────────────────────────────────── */
+  .error-display {
+    border: 1px solid var(--border);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .error-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.78rem;
+    color: var(--fg);
+    letter-spacing: 0.02em;
+    line-height: 1.6;
+  }
+
+  /* ── Action buttons — matches YamlJson exactly ────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover:not(:disabled) {
+    border-color: var(--border-active);
+  }
+
+  /* ── Mobile ───────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .csv-json-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .panes {
+      flex-direction: column;
+      flex: unset;
+    }
+
+    .pane {
+      height: 300px;
+    }
+
+    .direction-controls {
+      flex-direction: row;
+      justify-content: center;
+    }
+  }
+</style>

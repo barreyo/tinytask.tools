@@ -1,0 +1,1089 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="qr-tool">
+  <!-- Input -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-label">content</span>
+      <span id="char-count" class="meta-badge"></span>
+    </div>
+    <textarea
+      id="qr-input"
+      class="qr-input"
+      placeholder="https://example.com"
+      rows="3"
+      aria-label="QR code content"></textarea>
+  </div>
+
+  <!-- Error Correction -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-label">error correction</span>
+      <span id="ec-badge" class="meta-badge"></span>
+    </div>
+    <div class="btn-group" id="ec-btns" role="group" aria-label="Error correction level">
+      <button class="type-btn" data-ec="L">L — 7%</button>
+      <button class="type-btn active" data-ec="M">M — 15%</button>
+      <button class="type-btn" data-ec="Q">Q — 25%</button>
+      <button class="type-btn" data-ec="H">H — 30%</button>
+    </div>
+    <p id="ec-notice" class="notice" hidden>
+      Error correction raised to Q because a logo is embedded.
+    </p>
+  </div>
+
+  <!-- Dot Style -->
+  <div class="section">
+    <span class="section-label">dot style</span>
+    <div class="btn-group" id="dot-shape-btns" role="group" aria-label="Dot shape">
+      <button class="type-btn active" data-dot="square">square</button>
+      <button class="type-btn" data-dot="rounded">rounded</button>
+      <button class="type-btn" data-dot="dots">dots</button>
+      <button class="type-btn" data-dot="classy">classy</button>
+      <button class="type-btn" data-dot="classy-rounded">classy-rounded</button>
+      <button class="type-btn" data-dot="extra-rounded">extra-rounded</button>
+    </div>
+    <div class="color-row">
+      <div class="color-field">
+        <label class="section-label" for="dot-color">colour</label>
+        <div class="color-input-wrap">
+          <input type="color" id="dot-color" value="#000000" class="color-swatch" />
+          <input type="text" id="dot-color-hex" value="#000000" class="hex-input" maxlength="7" />
+        </div>
+      </div>
+      <div class="color-field">
+        <label class="section-label">
+          <input type="checkbox" id="dot-gradient-toggle" class="checkbox" />
+          gradient
+        </label>
+      </div>
+    </div>
+    <div id="dot-gradient-opts" class="gradient-opts" hidden>
+      <div class="color-row">
+        <div class="color-field">
+          <label class="section-label" for="dot-color2">second colour</label>
+          <div class="color-input-wrap">
+            <input type="color" id="dot-color2" value="#3b82f6" class="color-swatch" />
+            <input
+              type="text"
+              id="dot-color2-hex"
+              value="#3b82f6"
+              class="hex-input"
+              maxlength="7"
+            />
+          </div>
+        </div>
+        <div class="color-field">
+          <label class="section-label" for="dot-grad-type">type</label>
+          <select id="dot-grad-type" class="select-input">
+            <option value="linear">linear</option>
+            <option value="radial">radial</option>
+          </select>
+        </div>
+        <div class="color-field">
+          <label class="section-label" for="dot-grad-rotation">rotation</label>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="dot-grad-rotation"
+              min="0"
+              max="360"
+              value="0"
+              class="range-input"
+            />
+            <span id="dot-grad-rotation-val" class="range-val">0°</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Corner Square Style -->
+  <div class="section">
+    <span class="section-label">corner square style</span>
+    <div class="btn-group" id="cs-shape-btns" role="group" aria-label="Corner square shape">
+      <button class="type-btn active" data-cs="square">square</button>
+      <button class="type-btn" data-cs="dot">dot</button>
+      <button class="type-btn" data-cs="extra-rounded">extra-rounded</button>
+    </div>
+    <div class="color-row">
+      <div class="color-field">
+        <label class="section-label" for="cs-color">colour</label>
+        <div class="color-input-wrap">
+          <input type="color" id="cs-color" value="#000000" class="color-swatch" />
+          <input type="text" id="cs-color-hex" value="#000000" class="hex-input" maxlength="7" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Corner Dot Style -->
+  <div class="section">
+    <span class="section-label">corner dot style</span>
+    <div class="btn-group" id="cd-shape-btns" role="group" aria-label="Corner dot shape">
+      <button class="type-btn active" data-cd="square">square</button>
+      <button class="type-btn" data-cd="dot">dot</button>
+    </div>
+    <div class="color-row">
+      <div class="color-field">
+        <label class="section-label" for="cd-color">colour</label>
+        <div class="color-input-wrap">
+          <input type="color" id="cd-color" value="#000000" class="color-swatch" />
+          <input type="text" id="cd-color-hex" value="#000000" class="hex-input" maxlength="7" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Background -->
+  <div class="section">
+    <span class="section-label">background</span>
+    <div class="color-row">
+      <div class="color-field">
+        <label class="section-label" for="bg-color">colour</label>
+        <div class="color-input-wrap">
+          <input type="color" id="bg-color" value="#ffffff" class="color-swatch" />
+          <input type="text" id="bg-color-hex" value="#ffffff" class="hex-input" maxlength="7" />
+        </div>
+      </div>
+      <div class="color-field">
+        <label class="section-label">
+          <input type="checkbox" id="bg-transparent" class="checkbox" />
+          transparent (PNG / SVG)
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logo -->
+  <div class="section">
+    <span class="section-label">centre logo</span>
+    <div class="logo-row">
+      <label class="action-btn logo-upload-label">
+        upload image
+        <input
+          type="file"
+          id="logo-input"
+          accept="image/png,image/jpeg,image/svg+xml"
+          class="visually-hidden"
+          aria-label="Upload logo image"
+        />
+      </label>
+      <button id="logo-remove" class="action-btn" hidden>remove</button>
+      <img id="logo-preview" class="logo-preview" src="" alt="Logo preview" hidden />
+    </div>
+    <div id="logo-opts" class="logo-opts" hidden>
+      <div class="slider-group">
+        <label class="section-label" for="logo-size">size ratio</label>
+        <div class="slider-row">
+          <input
+            type="range"
+            id="logo-size"
+            min="0.1"
+            max="0.5"
+            step="0.01"
+            value="0.3"
+            class="range-input"
+          />
+          <span id="logo-size-val" class="range-val">0.30</span>
+        </div>
+      </div>
+      <div class="slider-group">
+        <label class="section-label" for="logo-margin">margin (px)</label>
+        <div class="slider-row">
+          <input type="range" id="logo-margin" min="0" max="20" value="5" class="range-input" />
+          <span id="logo-margin-val" class="range-val">5</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output Size -->
+  <div class="section">
+    <span class="section-label">output size</span>
+    <div class="slider-row">
+      <input
+        type="range"
+        id="qr-size"
+        min="200"
+        max="2000"
+        step="50"
+        value="600"
+        class="range-input"
+      />
+      <span id="qr-size-val" class="range-val">600 px</span>
+    </div>
+  </div>
+
+  <!-- Preview + Info + Download -->
+  <div class="output-area">
+    <div class="preview-panel">
+      <div class="preview-header">
+        <span class="section-label">preview</span>
+      </div>
+      <div id="qr-canvas-wrap" class="canvas-wrap" aria-label="QR code preview" aria-live="polite">
+        <p id="qr-empty" class="qr-empty">enter content above to generate</p>
+      </div>
+    </div>
+
+    <div class="side-panel">
+      <!-- Info -->
+      <div class="info-panel">
+        <div class="section-label">info</div>
+        <div class="info-grid">
+          <span class="info-key">error correction</span>
+          <span id="info-ec" class="info-val">—</span>
+
+          <span class="info-key">ec recovery</span>
+          <span id="info-ec-pct" class="info-val">—</span>
+
+          <span class="info-key">version</span>
+          <span id="info-version" class="info-val">—</span>
+
+          <span class="info-key">modules</span>
+          <span id="info-modules" class="info-val">—</span>
+
+          <span class="info-key">content length</span>
+          <span id="info-length" class="info-val">—</span>
+
+          <span class="info-key">capacity</span>
+          <span id="info-capacity" class="info-val">—</span>
+
+          <span class="info-key">output size</span>
+          <span id="info-size" class="info-val">—</span>
+        </div>
+      </div>
+
+      <!-- Download -->
+      <div class="download-panel">
+        <div class="section-label">download</div>
+        <div class="download-btns">
+          <button id="dl-png" class="action-btn primary" disabled>download PNG</button>
+          <button id="dl-svg" class="action-btn" disabled>download SVG</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import QRCodeStyling, { type Options, type ErrorCorrectionLevel } from 'qr-code-styling';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const qrInput = document.getElementById('qr-input') as HTMLTextAreaElement;
+  const charCount = document.getElementById('char-count') as HTMLSpanElement;
+  const ecBtns = document.getElementById('ec-btns') as HTMLDivElement;
+  const ecBadge = document.getElementById('ec-badge') as HTMLSpanElement;
+  const ecNotice = document.getElementById('ec-notice') as HTMLParagraphElement;
+
+  const dotShapeBtns = document.getElementById('dot-shape-btns') as HTMLDivElement;
+  const dotColor = document.getElementById('dot-color') as HTMLInputElement;
+  const dotColorHex = document.getElementById('dot-color-hex') as HTMLInputElement;
+  const dotGradToggle = document.getElementById('dot-gradient-toggle') as HTMLInputElement;
+  const dotGradOpts = document.getElementById('dot-gradient-opts') as HTMLDivElement;
+  const dotColor2 = document.getElementById('dot-color2') as HTMLInputElement;
+  const dotColor2Hex = document.getElementById('dot-color2-hex') as HTMLInputElement;
+  const dotGradType = document.getElementById('dot-grad-type') as HTMLSelectElement;
+  const dotGradRotation = document.getElementById('dot-grad-rotation') as HTMLInputElement;
+  const dotGradRotationVal = document.getElementById('dot-grad-rotation-val') as HTMLSpanElement;
+
+  const csShapeBtns = document.getElementById('cs-shape-btns') as HTMLDivElement;
+  const csColor = document.getElementById('cs-color') as HTMLInputElement;
+  const csColorHex = document.getElementById('cs-color-hex') as HTMLInputElement;
+
+  const cdShapeBtns = document.getElementById('cd-shape-btns') as HTMLDivElement;
+  const cdColor = document.getElementById('cd-color') as HTMLInputElement;
+  const cdColorHex = document.getElementById('cd-color-hex') as HTMLInputElement;
+
+  const bgColor = document.getElementById('bg-color') as HTMLInputElement;
+  const bgColorHex = document.getElementById('bg-color-hex') as HTMLInputElement;
+  const bgTransparent = document.getElementById('bg-transparent') as HTMLInputElement;
+
+  const logoInput = document.getElementById('logo-input') as HTMLInputElement;
+  const logoRemove = document.getElementById('logo-remove') as HTMLButtonElement;
+  const logoPreview = document.getElementById('logo-preview') as HTMLImageElement;
+  const logoOpts = document.getElementById('logo-opts') as HTMLDivElement;
+  const logoSize = document.getElementById('logo-size') as HTMLInputElement;
+  const logoSizeVal = document.getElementById('logo-size-val') as HTMLSpanElement;
+  const logoMargin = document.getElementById('logo-margin') as HTMLInputElement;
+  const logoMarginVal = document.getElementById('logo-margin-val') as HTMLSpanElement;
+
+  const qrSizeSlider = document.getElementById('qr-size') as HTMLInputElement;
+  const qrSizeVal = document.getElementById('qr-size-val') as HTMLSpanElement;
+
+  const canvasWrap = document.getElementById('qr-canvas-wrap') as HTMLDivElement;
+  const qrEmpty = document.getElementById('qr-empty') as HTMLParagraphElement;
+
+  const infoEc = document.getElementById('info-ec') as HTMLSpanElement;
+  const infoEcPct = document.getElementById('info-ec-pct') as HTMLSpanElement;
+  const infoVersion = document.getElementById('info-version') as HTMLSpanElement;
+  const infoModules = document.getElementById('info-modules') as HTMLSpanElement;
+  const infoLength = document.getElementById('info-length') as HTMLSpanElement;
+  const infoCapacity = document.getElementById('info-capacity') as HTMLSpanElement;
+  const infoSize = document.getElementById('info-size') as HTMLSpanElement;
+
+  const dlPng = document.getElementById('dl-png') as HTMLButtonElement;
+  const dlSvg = document.getElementById('dl-svg') as HTMLButtonElement;
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let ecLevel: ErrorCorrectionLevel = 'M';
+  let dotShape: string = 'square';
+  let csShape: string = 'square';
+  let cdShape: string = 'square';
+  let logoDataUrl: string | null = null;
+  let qrCode: QRCodeStyling | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const EC_INFO: Record<string, { pct: string; label: string }> = {
+    L: { pct: '7%', label: 'Low' },
+    M: { pct: '15%', label: 'Medium' },
+    Q: { pct: '25%', label: 'Quartile' },
+    H: { pct: '30%', label: 'High' },
+  };
+
+  // Approximate byte capacity per EC level per version (version 1-40)
+  // Using version as a proxy; real capacity depends on encoding mode.
+  // We compute QR version from content length heuristically.
+  const EC_BYTE_CAPACITY: Record<string, number[]> = {
+    L: [
+      17, 32, 53, 78, 106, 134, 154, 192, 230, 271, 321, 367, 425, 458, 520, 586, 644, 718, 792,
+      858, 929, 1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732, 1840, 1952, 2068, 2188, 2303,
+      2431, 2563, 2699, 2809, 2953,
+    ],
+    M: [
+      14, 26, 42, 62, 84, 106, 122, 152, 180, 213, 251, 287, 331, 362, 412, 450, 504, 560, 624, 666,
+      711, 779, 857, 911, 997, 1059, 1125, 1190, 1264, 1370, 1452, 1538, 1628, 1722, 1809, 1911,
+      1989, 2099, 2213, 2331,
+    ],
+    Q: [
+      11, 20, 32, 46, 60, 74, 86, 108, 130, 151, 177, 203, 241, 258, 292, 322, 364, 394, 442, 482,
+      509, 565, 611, 661, 715, 751, 805, 868, 908, 982, 1030, 1112, 1168, 1228, 1283, 1351, 1423,
+      1499, 1579, 1663,
+    ],
+    H: [
+      7, 14, 24, 34, 44, 58, 64, 84, 98, 119, 137, 155, 177, 194, 220, 250, 280, 310, 338, 382, 403,
+      439, 461, 511, 535, 593, 625, 658, 698, 742, 790, 842, 898, 958, 983, 1051, 1093, 1139, 1219,
+      1273,
+    ],
+  };
+
+  function getQrVersion(byteLen: number, ec: string): number {
+    const caps = EC_BYTE_CAPACITY[ec];
+    for (let i = 0; i < caps.length; i++) {
+      if (caps[i] >= byteLen) return i + 1;
+    }
+    return 40;
+  }
+
+  // ── QR Code instance ──────────────────────────────────────────────────────────
+  function buildOptions(): Options {
+    const content = qrInput.value.trim();
+    const size = parseInt(qrSizeSlider.value, 10);
+    const useTransparent = bgTransparent.checked;
+
+    const dotColorVal = dotColor.value;
+    type DotOpts = NonNullable<Options['dotsOptions']>;
+    type CSqOpts = NonNullable<Options['cornersSquareOptions']>;
+    type CDotOpts = NonNullable<Options['cornersDotOptions']>;
+
+    const dotsOpt: DotOpts = dotGradToggle.checked
+      ? {
+          type: dotShape as DotOpts['type'],
+          gradient: {
+            type: dotGradType.value as 'linear' | 'radial',
+            rotation: (parseInt(dotGradRotation.value, 10) * Math.PI) / 180,
+            colorStops: [
+              { offset: 0, color: dotColorVal },
+              { offset: 1, color: dotColor2.value },
+            ],
+          },
+        }
+      : { type: dotShape as DotOpts['type'], color: dotColorVal };
+
+    const opts: Options = {
+      width: size,
+      height: size,
+      data: content || 'https://example.com',
+      image: logoDataUrl ?? undefined,
+      qrOptions: { errorCorrectionLevel: ecLevel },
+      dotsOptions: dotsOpt,
+      cornersSquareOptions: {
+        type: csShape as CSqOpts['type'],
+        color: csColor.value,
+      },
+      cornersDotOptions: {
+        type: cdShape as CDotOpts['type'],
+        color: cdColor.value,
+      },
+      backgroundOptions: useTransparent ? { color: 'transparent' } : { color: bgColor.value },
+      imageOptions: {
+        crossOrigin: 'anonymous',
+        margin: parseInt(logoMargin.value, 10),
+        imageSize: parseFloat(logoSize.value),
+        hideBackgroundDots: true,
+      },
+    };
+
+    return opts;
+  }
+
+  function updateInfo(): void {
+    const content = qrInput.value.trim();
+    const byteLen = new TextEncoder().encode(content).length;
+    const version = getQrVersion(byteLen || 1, ecLevel);
+    const modules = version * 4 + 17;
+    const caps = EC_BYTE_CAPACITY[ecLevel];
+    const capacity = caps[version - 1] ?? caps[caps.length - 1];
+    const size = parseInt(qrSizeSlider.value, 10);
+
+    infoEc.textContent = `${EC_INFO[ecLevel].label} (${ecLevel})`;
+    infoEcPct.textContent = EC_INFO[ecLevel].pct;
+    infoVersion.textContent = `${version}`;
+    infoModules.textContent = `${modules} × ${modules}`;
+    infoLength.textContent = `${byteLen} bytes`;
+    infoCapacity.textContent = `${capacity} bytes max`;
+    infoSize.textContent = `${size} × ${size} px`;
+  }
+
+  function render(): void {
+    const content = qrInput.value.trim();
+
+    if (!content) {
+      qrEmpty.hidden = false;
+      if (qrCode) {
+        // Clear canvas area except empty message
+        const existing = canvasWrap.querySelector('canvas, svg');
+        if (existing) existing.remove();
+      }
+      dlPng.disabled = true;
+      dlSvg.disabled = true;
+      updateInfo();
+      return;
+    }
+
+    qrEmpty.hidden = true;
+
+    const opts = buildOptions();
+
+    if (!qrCode) {
+      qrCode = new QRCodeStyling(opts);
+      qrCode.append(canvasWrap);
+    } else {
+      qrCode.update(opts);
+    }
+
+    dlPng.disabled = false;
+    dlSvg.disabled = false;
+    updateInfo();
+  }
+
+  function scheduleRender(): void {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(render, 300);
+  }
+
+  // ── Error correction ──────────────────────────────────────────────────────────
+  function setEC(level: ErrorCorrectionLevel, fromLogo = false): void {
+    ecLevel = level;
+    ecBtns.querySelectorAll<HTMLButtonElement>('[data-ec]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.ec === level);
+    });
+    ecBadge.textContent = `${EC_INFO[level].label} · ${EC_INFO[level].pct} recovery`;
+    if (!fromLogo) ecNotice.hidden = true;
+    scheduleRender();
+  }
+
+  ecBtns.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-ec]');
+    if (btn?.dataset.ec) setEC(btn.dataset.ec as ErrorCorrectionLevel);
+  });
+
+  // ── Dot shape ─────────────────────────────────────────────────────────────────
+  dotShapeBtns.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-dot]');
+    if (!btn) return;
+    dotShape = btn.dataset.dot!;
+    dotShapeBtns.querySelectorAll('[data-dot]').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    scheduleRender();
+  });
+
+  // ── Corner square shape ───────────────────────────────────────────────────────
+  csShapeBtns.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cs]');
+    if (!btn) return;
+    csShape = btn.dataset.cs!;
+    csShapeBtns.querySelectorAll('[data-cs]').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    scheduleRender();
+  });
+
+  // ── Corner dot shape ──────────────────────────────────────────────────────────
+  cdShapeBtns.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cd]');
+    if (!btn) return;
+    cdShape = btn.dataset.cd!;
+    cdShapeBtns.querySelectorAll('[data-cd]').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    scheduleRender();
+  });
+
+  // ── Color pickers ─────────────────────────────────────────────────────────────
+  function syncColorPair(picker: HTMLInputElement, hex: HTMLInputElement): void {
+    picker.addEventListener('input', () => {
+      hex.value = picker.value;
+      scheduleRender();
+    });
+    hex.addEventListener('input', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(hex.value)) {
+        picker.value = hex.value;
+        scheduleRender();
+      }
+    });
+    hex.addEventListener('blur', () => {
+      if (!/^#[0-9a-fA-F]{6}$/.test(hex.value)) hex.value = picker.value;
+    });
+  }
+
+  syncColorPair(dotColor, dotColorHex);
+  syncColorPair(dotColor2, dotColor2Hex);
+  syncColorPair(csColor, csColorHex);
+  syncColorPair(cdColor, cdColorHex);
+  syncColorPair(bgColor, bgColorHex);
+
+  // ── Gradient toggle ───────────────────────────────────────────────────────────
+  dotGradToggle.addEventListener('change', () => {
+    dotGradOpts.hidden = !dotGradToggle.checked;
+    scheduleRender();
+  });
+
+  dotGradType.addEventListener('change', scheduleRender);
+
+  dotGradRotation.addEventListener('input', () => {
+    dotGradRotationVal.textContent = `${dotGradRotation.value}°`;
+    scheduleRender();
+  });
+
+  // ── Background transparent ────────────────────────────────────────────────────
+  bgTransparent.addEventListener('change', () => {
+    bgColor.disabled = bgTransparent.checked;
+    bgColorHex.disabled = bgTransparent.checked;
+    scheduleRender();
+  });
+
+  // ── Logo ──────────────────────────────────────────────────────────────────────
+  const EC_ORDER = ['L', 'M', 'Q', 'H'];
+
+  logoInput.addEventListener('change', () => {
+    const file = logoInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      logoDataUrl = ev.target?.result as string;
+      logoPreview.src = logoDataUrl;
+      logoPreview.hidden = false;
+      logoRemove.hidden = false;
+      logoOpts.hidden = false;
+
+      // Auto-upgrade EC to at least Q when a logo is added
+      const currentIdx = EC_ORDER.indexOf(ecLevel);
+      const qIdx = EC_ORDER.indexOf('Q');
+      if (currentIdx < qIdx) {
+        ecNotice.hidden = false;
+        setEC('Q', true);
+      }
+
+      scheduleRender();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  logoRemove.addEventListener('click', () => {
+    logoDataUrl = null;
+    logoInput.value = '';
+    logoPreview.src = '';
+    logoPreview.hidden = true;
+    logoRemove.hidden = true;
+    logoOpts.hidden = true;
+    ecNotice.hidden = true;
+    scheduleRender();
+  });
+
+  logoSize.addEventListener('input', () => {
+    logoSizeVal.textContent = parseFloat(logoSize.value).toFixed(2);
+    scheduleRender();
+  });
+
+  logoMargin.addEventListener('input', () => {
+    logoMarginVal.textContent = logoMargin.value;
+    scheduleRender();
+  });
+
+  // ── Output size ───────────────────────────────────────────────────────────────
+  qrSizeSlider.addEventListener('input', () => {
+    qrSizeVal.textContent = `${qrSizeSlider.value} px`;
+    scheduleRender();
+  });
+
+  // ── Input ─────────────────────────────────────────────────────────────────────
+  qrInput.addEventListener('input', () => {
+    const len = new TextEncoder().encode(qrInput.value).length;
+    charCount.textContent = len ? `${len} bytes` : '';
+    scheduleRender();
+  });
+
+  // ── Download ──────────────────────────────────────────────────────────────────
+  dlPng.addEventListener('click', async () => {
+    if (!qrCode) return;
+    dlPng.textContent = 'downloading…';
+    await qrCode.download({ name: `qr-${Date.now()}`, extension: 'png' });
+    dlPng.textContent = 'download PNG';
+  });
+
+  dlSvg.addEventListener('click', async () => {
+    if (!qrCode) return;
+    dlSvg.textContent = 'downloading…';
+    await qrCode.download({ name: `qr-${Date.now()}`, extension: 'svg' });
+    dlSvg.textContent = 'download SVG';
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  qrInput.value = 'https://example.com';
+  charCount.textContent = `${new TextEncoder().encode(qrInput.value).length} bytes`;
+  setEC('M');
+  render();
+</script>
+
+<style>
+  .qr-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Section ─────────────────────────────────────────────────────────────────── */
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+
+  .meta-badge {
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+  }
+
+  /* ── Input ───────────────────────────────────────────────────────────────────── */
+  .qr-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 0.6rem 0.75rem;
+    resize: vertical;
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.5;
+    transition: border-color 0.1s;
+  }
+
+  .qr-input:focus {
+    outline: none;
+    border-color: var(--border-active);
+  }
+
+  /* ── Button group ────────────────────────────────────────────────────────────── */
+  .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  /* type-btn is :global because it may be dynamically created in other tools;
+     here we scope to the component directly */
+  .type-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.55rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+    white-space: nowrap;
+  }
+
+  .type-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .type-btn.active {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+  }
+
+  /* ── Notice ──────────────────────────────────────────────────────────────────── */
+  .notice {
+    margin: 0;
+    padding: 0.4rem 0.65rem;
+    border-left: 2px solid var(--border-active);
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    color: var(--fg-dim);
+  }
+
+  /* ── Color row ───────────────────────────────────────────────────────────────── */
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .color-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .color-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.4rem;
+  }
+
+  .color-swatch {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: none;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+    border-radius: 0;
+    display: block;
+  }
+
+  .color-swatch::-webkit-color-swatch-wrapper {
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .color-swatch::-webkit-color-swatch {
+    border: none;
+    border-radius: 0;
+  }
+
+  .hex-input {
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    width: 5rem;
+    padding: 0;
+    outline: none;
+    letter-spacing: 0.04em;
+  }
+
+  .hex-input:disabled {
+    color: var(--fg-dim);
+    cursor: not-allowed;
+  }
+
+  /* ── Checkbox ────────────────────────────────────────────────────────────────── */
+  .checkbox {
+    accent-color: var(--fg);
+    cursor: pointer;
+  }
+
+  /* ── Select ──────────────────────────────────────────────────────────────────── */
+  .select-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.4rem;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .select-input:focus {
+    border-color: var(--border-active);
+  }
+
+  /* ── Gradient options ────────────────────────────────────────────────────────── */
+  .gradient-opts {
+    padding: 0.6rem 0 0;
+  }
+
+  /* ── Slider ──────────────────────────────────────────────────────────────────── */
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .range-input {
+    appearance: none;
+    width: 180px;
+    height: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+
+  .range-input::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--fg);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .range-input::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--fg);
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+  }
+
+  .range-val {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--fg-dim);
+    min-width: 3.5rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Logo ────────────────────────────────────────────────────────────────────── */
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .logo-upload-label {
+    cursor: pointer;
+  }
+
+  .logo-preview {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    background: repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 0 0 / 0.6rem 0.6rem;
+  }
+
+  .logo-opts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-top: 0.4rem;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* ── Visually hidden ─────────────────────────────────────────────────────────── */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ── Output area ─────────────────────────────────────────────────────────────── */
+  .output-area {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* ── Preview ─────────────────────────────────────────────────────────────────── */
+  .preview-panel {
+    border: 1px solid var(--border);
+  }
+
+  .preview-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .canvas-wrap {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 160px;
+    overflow: auto;
+  }
+
+  /* Scale down the QR canvas so it always fits in the preview area */
+  :global(.canvas-wrap canvas),
+  :global(.canvas-wrap svg) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .qr-empty {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Side panel ──────────────────────────────────────────────────────────────── */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Info panel ──────────────────────────────────────────────────────────────── */
+  .info-panel {
+    border: 1px solid var(--border);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+    align-items: baseline;
+  }
+
+  .info-key {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+
+  .info-val {
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--fg);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Download panel ──────────────────────────────────────────────────────────── */
+  .download-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .download-btns {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────────── */
+  @media (max-width: 700px) {
+    .output-area {
+      grid-template-columns: 1fr;
+    }
+
+    .range-input {
+      width: 130px;
+    }
+
+    .color-row {
+      gap: 0.75rem;
+    }
+  }
+</style>

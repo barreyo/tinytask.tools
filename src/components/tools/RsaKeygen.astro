@@ -1,0 +1,385 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="rsa-tool">
+  <!-- Controls -->
+  <div class="controls-section">
+    <div class="controls-header">
+      <span class="section-label">configuration</span>
+    </div>
+    <div class="controls-body">
+      <div class="control-row">
+        <div class="field">
+          <label class="field-label" for="key-size">Key size</label>
+          <select id="key-size" class="field-select">
+            <option value="2048" selected>2048 bits</option>
+            <option value="4096">4096 bits</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="hash-algo">Hash algorithm</label>
+          <select id="hash-algo" class="field-select">
+            <option value="SHA-256" selected>SHA-256</option>
+            <option value="SHA-384">SHA-384</option>
+            <option value="SHA-512">SHA-512</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="key-usage">Usage</label>
+          <select id="key-usage" class="field-select">
+            <option value="encrypt" selected>Encryption (RSA-OAEP)</option>
+            <option value="sign">Signing (RSASSA-PKCS1-v1_5)</option>
+          </select>
+        </div>
+        <div class="field field-btn">
+          <label class="field-label">&nbsp;</label>
+          <button class="action-btn primary" id="generate-btn">generate</button>
+        </div>
+      </div>
+      <p class="hint" id="keygen-hint">4096-bit keys may take a few seconds to generate.</p>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div id="status-display" class="status-display" hidden>
+    <span class="status-text" id="status-text">generating…</span>
+  </div>
+
+  <!-- Public key -->
+  <div class="key-section" id="public-key-section" hidden>
+    <div class="key-header">
+      <div class="key-meta">
+        <span class="section-label">public key</span>
+        <span class="key-format-label">(spki / pem)</span>
+      </div>
+      <div class="key-actions">
+        <button class="action-btn" id="copy-public-btn">copy</button>
+        <button class="action-btn" id="download-public-btn">download .pem</button>
+      </div>
+    </div>
+    <textarea id="public-key-output" class="key-textarea" readonly spellcheck="false" rows="10"
+    ></textarea>
+    <div class="fingerprint-row">
+      <span class="section-label">sha-256 fingerprint</span>
+      <code id="public-fingerprint" class="fingerprint-value"></code>
+      <button class="action-btn" id="copy-fingerprint-btn">copy</button>
+    </div>
+  </div>
+
+  <!-- Private key -->
+  <div class="key-section" id="private-key-section" hidden>
+    <div class="key-header">
+      <div class="key-meta">
+        <span class="section-label">private key</span>
+        <span class="key-format-label">(pkcs8 / pem)</span>
+      </div>
+      <div class="key-actions">
+        <button class="action-btn" id="copy-private-btn">copy</button>
+        <button class="action-btn" id="download-private-btn">download .pem</button>
+      </div>
+    </div>
+    <textarea id="private-key-output" class="key-textarea" readonly spellcheck="false" rows="14"
+    ></textarea>
+    <p class="private-warning">
+      Keep this private key secret — never share it or commit it to version control.
+    </p>
+  </div>
+</div>
+
+<script>
+  import { generateRsaKeyPair } from '../../lib/rsa-keygen';
+  import type { ModulusLength, HashAlgorithm, KeyUsageMode } from '../../lib/rsa-keygen';
+
+  const keySizeEl = document.getElementById('key-size') as HTMLSelectElement;
+  const hashAlgoEl = document.getElementById('hash-algo') as HTMLSelectElement;
+  const keyUsageEl = document.getElementById('key-usage') as HTMLSelectElement;
+  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
+  const statusDisplay = document.getElementById('status-display') as HTMLDivElement;
+  const statusText = document.getElementById('status-text') as HTMLSpanElement;
+  const keySizeHint = document.getElementById('keygen-hint') as HTMLParagraphElement;
+
+  const publicKeySection = document.getElementById('public-key-section') as HTMLDivElement;
+  const privateKeySection = document.getElementById('private-key-section') as HTMLDivElement;
+  const publicKeyOutput = document.getElementById('public-key-output') as HTMLTextAreaElement;
+  const privateKeyOutput = document.getElementById('private-key-output') as HTMLTextAreaElement;
+  const publicFingerprint = document.getElementById('public-fingerprint') as HTMLElement;
+
+  const copyPublicBtn = document.getElementById('copy-public-btn') as HTMLButtonElement;
+  const copyPrivateBtn = document.getElementById('copy-private-btn') as HTMLButtonElement;
+  const downloadPublicBtn = document.getElementById('download-public-btn') as HTMLButtonElement;
+  const downloadPrivateBtn = document.getElementById('download-private-btn') as HTMLButtonElement;
+  const copyFingerprintBtn = document.getElementById('copy-fingerprint-btn') as HTMLButtonElement;
+
+  keySizeEl.addEventListener('change', () => {
+    keySizeHint.hidden = keySizeEl.value !== '4096';
+  });
+
+  async function generate(): Promise<void> {
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'generating…';
+    statusDisplay.hidden = false;
+    statusText.textContent = 'generating key pair…';
+    publicKeySection.hidden = true;
+    privateKeySection.hidden = true;
+
+    try {
+      const modulusLength = parseInt(keySizeEl.value) as ModulusLength;
+      const hash = hashAlgoEl.value as HashAlgorithm;
+      const usage = keyUsageEl.value as KeyUsageMode;
+
+      const result = await generateRsaKeyPair(modulusLength, hash, usage);
+
+      publicKeyOutput.value = result.publicKeyPem;
+      privateKeyOutput.value = result.privateKeyPem;
+      publicFingerprint.textContent = result.publicKeyFingerprint;
+
+      publicKeySection.hidden = false;
+      privateKeySection.hidden = false;
+      statusDisplay.hidden = true;
+    } catch (err) {
+      statusText.textContent = `Error: ${(err as Error).message}`;
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'generate';
+    }
+  }
+
+  generateBtn.addEventListener('click', generate);
+
+  function copyText(btn: HTMLButtonElement, text: string): void {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied';
+      setTimeout(() => (btn.textContent = btn.id.includes('fingerprint') ? 'copy' : 'copy'), 1200);
+    });
+  }
+
+  copyPublicBtn.addEventListener('click', () => copyText(copyPublicBtn, publicKeyOutput.value));
+  copyPrivateBtn.addEventListener('click', () => copyText(copyPrivateBtn, privateKeyOutput.value));
+  copyFingerprintBtn.addEventListener('click', () =>
+    copyText(copyFingerprintBtn, publicFingerprint.textContent ?? ''),
+  );
+
+  function downloadPem(content: string, filename: string): void {
+    const blob = new Blob([content], { type: 'application/x-pem-file' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  downloadPublicBtn.addEventListener('click', () =>
+    downloadPem(publicKeyOutput.value, 'public.pem'),
+  );
+  downloadPrivateBtn.addEventListener('click', () =>
+    downloadPem(privateKeyOutput.value, 'private.pem'),
+  );
+</script>
+
+<style>
+  .rsa-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Controls ───────────────────────────────────────────────────────────── */
+  .controls-section {
+    border: 1px solid var(--border);
+  }
+
+  .controls-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .controls-body {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .control-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field-btn .action-btn {
+    width: 100%;
+  }
+
+  .field-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .field-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .field-select:focus {
+    outline: 1px solid var(--border-active);
+  }
+
+  .hint {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Status ─────────────────────────────────────────────────────────────── */
+  .status-display {
+    border: 1px solid var(--border);
+    padding: 0.75rem;
+  }
+
+  .status-text {
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Key sections ───────────────────────────────────────────────────────── */
+  .key-section {
+    border: 1px solid var(--border);
+  }
+
+  .key-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .key-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .key-format-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+
+  .key-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .key-textarea {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .key-textarea:focus {
+    outline: none;
+  }
+
+  /* ── Fingerprint ────────────────────────────────────────────────────────── */
+  .fingerprint-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .fingerprint-value {
+    flex: 1;
+    font-family: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  /* ── Private warning ────────────────────────────────────────────────────── */
+  .private-warning {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    color: var(--fg-dim);
+  }
+
+  /* ── Shared ─────────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover:not(:disabled) {
+    border-color: var(--border-active);
+  }
+</style>

@@ -104,6 +104,40 @@ body {
   background: var(--fg-dim);
 }
 
+/* ─── Vimium hint mode ───────────────────────────────────────────────────────── */
+body[data-hint-mode] .tool-card {
+  opacity: 0.2;
+}
+
+body[data-hint-mode] .tool-card-wrapper[data-hint-key] .tool-card {
+  opacity: 1;
+  border-color: var(--border-active);
+}
+
+.vimium-hint {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--fg);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.4rem;
+  line-height: 1.4;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ─── Search highlight marks ─────────────────────────────────────────────────── */
+mark {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ─── Interactive elements ───────────────────────────────────────────────────── */
 button,
 [role='button'],

@@ -1,0 +1,748 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="interest-tool">
+  <!-- Preset selector -->
+  <div class="preset-bar">
+    <span class="section-label">preset</span>
+    <div class="preset-btns">
+      <button class="preset-btn active" data-preset="credit-card">Credit Card</button>
+      <button class="preset-btn" data-preset="bnpl">BNPL</button>
+      <button class="preset-btn" data-preset="mortgage">Mortgage</button>
+      <button class="preset-btn" data-preset="personal">Personal</button>
+      <button class="preset-btn" data-preset="auto">Auto</button>
+      <button class="preset-btn" data-preset="custom">Custom</button>
+    </div>
+  </div>
+
+  <!-- Inputs -->
+  <div class="input-section">
+    <div class="input-header">
+      <span class="section-label">inputs</span>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label class="field-label" for="principal">Principal ($)</label>
+        <input type="number" id="principal" class="field-input" value="5000" min="0" step="100" />
+      </div>
+      <div class="field">
+        <label class="field-label" for="apr">APR (%)</label>
+        <input type="number" id="apr" class="field-input" value="24.99" min="0" step="0.01" />
+      </div>
+      <div class="field">
+        <label class="field-label" for="term-months">Term (months)</label>
+        <input type="number" id="term-months" class="field-input" value="60" min="1" step="1" />
+      </div>
+      <div class="field">
+        <label class="field-label" for="compounding">Compounding</label>
+        <select id="compounding" class="field-select">
+          <option value="daily">Daily</option>
+          <option value="monthly" selected>Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="payment-freq">Payment Frequency</label>
+        <select id="payment-freq" class="field-select">
+          <option value="monthly" selected>Monthly</option>
+          <option value="biweekly">Bi-weekly</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="fixed-payment"
+          >Fixed Payment ($) <span class="dim">(0 = auto)</span></label
+        >
+        <input type="number" id="fixed-payment" class="field-input" value="0" min="0" step="1" />
+      </div>
+    </div>
+
+    <!-- Minimum payment mode (credit card) -->
+    <div class="min-payment-section" id="min-payment-section">
+      <label class="toggle-label">
+        <input type="checkbox" id="min-payment-mode" />
+        <span>Minimum payment mode</span>
+      </label>
+      <div class="min-payment-fields" id="min-payment-fields">
+        <div class="field">
+          <label class="field-label" for="min-pct">Min payment % of balance</label>
+          <input type="number" id="min-pct" class="field-input" value="2" min="0" step="0.1" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="min-floor">Min payment floor ($)</label>
+          <input type="number" id="min-floor" class="field-input" value="25" min="0" step="1" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Fees -->
+    <details class="fees-details">
+      <summary class="fees-summary">
+        <span class="section-label">fees &amp; extras</span>
+        <span class="toggle-indicator">▸</span>
+      </summary>
+      <div class="fees-grid">
+        <div class="field">
+          <label class="field-label" for="origination-fee">Origination fee (% of principal)</label>
+          <input
+            type="number"
+            id="origination-fee"
+            class="field-input"
+            value="0"
+            min="0"
+            step="0.1"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="monthly-fee">Monthly fee ($)</label>
+          <input type="number" id="monthly-fee" class="field-input" value="0" min="0" step="0.5" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="per-payment-fee">Per-payment fee ($)</label>
+          <input
+            type="number"
+            id="per-payment-fee"
+            class="field-input"
+            value="0"
+            min="0"
+            step="0.5"
+          />
+        </div>
+      </div>
+    </details>
+
+    <div class="calc-btn-row">
+      <button class="action-btn primary" id="calc-btn">calculate</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-section" id="summary-section" hidden>
+    <div class="summary-header">
+      <span class="section-label">summary</span>
+    </div>
+    <div class="summary-grid">
+      <div class="stat-card">
+        <span class="stat-label">total interest</span>
+        <span class="stat-value" id="stat-interest">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">total fees</span>
+        <span class="stat-value" id="stat-fees">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">total cost</span>
+        <span class="stat-value" id="stat-total-cost">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">total paid</span>
+        <span class="stat-value" id="stat-total-paid">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">effective apr (incl. fees)</span>
+        <span class="stat-value" id="stat-effective-apr">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">payments</span>
+        <span class="stat-value" id="stat-periods">—</span>
+      </div>
+    </div>
+
+    <!-- Cost breakdown bar -->
+    <div class="breakdown-bar-wrap">
+      <div class="breakdown-bar" id="breakdown-bar">
+        <div class="bar-segment bar-principal" id="bar-principal" title="Principal"></div>
+        <div class="bar-segment bar-interest" id="bar-interest" title="Interest"></div>
+        <div class="bar-segment bar-fees" id="bar-fees" title="Fees"></div>
+      </div>
+      <div class="bar-legend">
+        <span class="legend-item"><span class="legend-dot dot-principal"></span>Principal</span>
+        <span class="legend-item"><span class="legend-dot dot-interest"></span>Interest</span>
+        <span class="legend-item"><span class="legend-dot dot-fees"></span>Fees</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Amortization table -->
+  <div class="schedule-section" id="schedule-section" hidden>
+    <div class="schedule-header">
+      <span class="section-label">amortization schedule</span>
+      <button class="action-btn" id="export-csv-btn">export csv</button>
+    </div>
+    <div class="table-wrap">
+      <table class="amort-table" id="amort-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Payment</th>
+            <th>Principal</th>
+            <th>Interest</th>
+            <th>Fees</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody id="amort-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    PRESETS,
+    computeAmortization,
+    computeSummary,
+    computeStandardPayment,
+    fmt,
+  } from '../../lib/interest-calculator';
+  import type { LoanInputs, LoanPreset } from '../../lib/interest-calculator';
+
+  // ── Element refs ────────────────────────────────────────────────────────────
+  const principalEl = document.getElementById('principal') as HTMLInputElement;
+  const aprEl = document.getElementById('apr') as HTMLInputElement;
+  const termEl = document.getElementById('term-months') as HTMLInputElement;
+  const compoundingEl = document.getElementById('compounding') as HTMLSelectElement;
+  const paymentFreqEl = document.getElementById('payment-freq') as HTMLSelectElement;
+  const fixedPaymentEl = document.getElementById('fixed-payment') as HTMLInputElement;
+  const minPaymentModeEl = document.getElementById('min-payment-mode') as HTMLInputElement;
+  const minPaymentFields = document.getElementById('min-payment-fields') as HTMLDivElement;
+  const minPctEl = document.getElementById('min-pct') as HTMLInputElement;
+  const minFloorEl = document.getElementById('min-floor') as HTMLInputElement;
+  const originationFeeEl = document.getElementById('origination-fee') as HTMLInputElement;
+  const monthlyFeeEl = document.getElementById('monthly-fee') as HTMLInputElement;
+  const perPaymentFeeEl = document.getElementById('per-payment-fee') as HTMLInputElement;
+  const calcBtn = document.getElementById('calc-btn') as HTMLButtonElement;
+
+  const summarySection = document.getElementById('summary-section') as HTMLDivElement;
+  const scheduleSection = document.getElementById('schedule-section') as HTMLDivElement;
+  const amortBody = document.getElementById('amort-body') as HTMLTableSectionElement;
+  const exportCsvBtn = document.getElementById('export-csv-btn') as HTMLButtonElement;
+
+  let currentRows: ReturnType<typeof computeAmortization> = [];
+
+  // ── Preset buttons ──────────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyPreset(btn.dataset.preset as LoanPreset);
+    });
+  });
+
+  function applyPreset(preset: LoanPreset): void {
+    const p = PRESETS[preset];
+    principalEl.value = String(p.principal);
+    aprEl.value = String(p.apr);
+    termEl.value = String(p.termMonths);
+    compoundingEl.value = p.compounding;
+    paymentFreqEl.value = p.paymentFrequency;
+    fixedPaymentEl.value = String(p.fixedPayment);
+    minPaymentModeEl.checked = p.minimumPaymentMode;
+    minPctEl.value = String(p.minPaymentPct);
+    minFloorEl.value = String(p.minPaymentFloor);
+    originationFeeEl.value = String(p.originationFeePct);
+    monthlyFeeEl.value = String(p.monthlyFee);
+    perPaymentFeeEl.value = String(p.perPaymentFee);
+    updateMinPaymentVisibility();
+  }
+
+  // Apply credit-card preset on load
+  applyPreset('credit-card');
+
+  function updateMinPaymentVisibility(): void {
+    minPaymentFields.hidden = !minPaymentModeEl.checked;
+  }
+
+  minPaymentModeEl.addEventListener('change', updateMinPaymentVisibility);
+  updateMinPaymentVisibility();
+
+  // ── Get inputs ──────────────────────────────────────────────────────────────
+  function getInputs(): LoanInputs {
+    return {
+      principal: parseFloat(principalEl.value) || 0,
+      apr: parseFloat(aprEl.value) || 0,
+      termMonths: parseInt(termEl.value) || 12,
+      compounding: compoundingEl.value as LoanInputs['compounding'],
+      paymentFrequency: paymentFreqEl.value as LoanInputs['paymentFrequency'],
+      fixedPayment: parseFloat(fixedPaymentEl.value) || 0,
+      minimumPaymentMode: minPaymentModeEl.checked,
+      minPaymentPct: parseFloat(minPctEl.value) || 2,
+      minPaymentFloor: parseFloat(minFloorEl.value) || 25,
+      originationFeePct: parseFloat(originationFeeEl.value) || 0,
+      monthlyFee: parseFloat(monthlyFeeEl.value) || 0,
+      perPaymentFee: parseFloat(perPaymentFeeEl.value) || 0,
+    };
+  }
+
+  // ── Calculate ───────────────────────────────────────────────────────────────
+  calcBtn.addEventListener('click', calculate);
+
+  document.querySelectorAll('.field-input, .field-select').forEach((el) => {
+    el.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') calculate();
+    });
+  });
+
+  function calculate(): void {
+    const inputs = getInputs();
+    if (inputs.principal <= 0) return;
+
+    const rows = computeAmortization(inputs);
+    currentRows = rows;
+    const summary = computeSummary(rows, inputs);
+
+    // Show summary
+    summarySection.hidden = false;
+    scheduleSection.hidden = false;
+
+    document.getElementById('stat-interest')!.textContent = `$${fmt(summary.totalInterest)}`;
+    document.getElementById('stat-fees')!.textContent = `$${fmt(summary.totalFees)}`;
+    document.getElementById('stat-total-cost')!.textContent = `$${fmt(summary.totalCost)}`;
+    document.getElementById('stat-total-paid')!.textContent = `$${fmt(summary.totalPayments)}`;
+    document.getElementById('stat-effective-apr')!.textContent =
+      `${summary.effectiveApr.toFixed(2)}%`;
+    document.getElementById('stat-periods')!.textContent = `${summary.periods}`;
+
+    // Breakdown bar
+    const total = inputs.principal + summary.totalInterest + summary.totalFees;
+    const pPct = (inputs.principal / total) * 100;
+    const iPct = (summary.totalInterest / total) * 100;
+    const fPct = (summary.totalFees / total) * 100;
+    (document.getElementById('bar-principal') as HTMLElement).style.width = `${pPct}%`;
+    (document.getElementById('bar-interest') as HTMLElement).style.width = `${iPct}%`;
+    (document.getElementById('bar-fees') as HTMLElement).style.width = `${fPct}%`;
+
+    // Render table
+    renderTable(rows);
+  }
+
+  function renderTable(rows: typeof currentRows): void {
+    amortBody.innerHTML = rows
+      .map((r) => {
+        const highlight = r.interest > r.principal ? ' class="interest-heavy"' : '';
+        return `<tr${highlight}>
+        <td>${r.period}</td>
+        <td>$${fmt(r.payment)}</td>
+        <td>$${fmt(r.principal)}</td>
+        <td>$${fmt(r.interest)}</td>
+        <td>$${fmt(r.fees)}</td>
+        <td>$${fmt(r.balance)}</td>
+      </tr>`;
+      })
+      .join('');
+  }
+
+  exportCsvBtn.addEventListener('click', () => {
+    if (!currentRows.length) return;
+    const header = 'Period,Payment,Principal,Interest,Fees,Balance\n';
+    const body = currentRows
+      .map(
+        (r) =>
+          `${r.period},${r.payment.toFixed(2)},${r.principal.toFixed(2)},${r.interest.toFixed(2)},${r.fees.toFixed(2)},${r.balance.toFixed(2)}`,
+      )
+      .join('\n');
+    const blob = new Blob([header + body], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'amortization.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  .interest-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Preset bar ─────────────────────────────────────────────────────────── */
+  .preset-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .preset-btns {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .preset-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .preset-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .preset-btn.active {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  /* ── Input section ──────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .input-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0;
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .dim {
+    opacity: 0.6;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .field-input,
+  .field-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .field-input:focus,
+  .field-select:focus {
+    outline: 1px solid var(--border-active);
+  }
+
+  /* ── Min payment section ────────────────────────────────────────────────── */
+  .min-payment-section {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .min-payment-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+    padding-top: 0.5rem;
+  }
+
+  /* ── Fees section ───────────────────────────────────────────────────────── */
+  .fees-details {
+    border-top: 1px solid var(--border);
+  }
+
+  .fees-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .fees-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .toggle-indicator {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    transition: transform 0.15s;
+  }
+
+  details[open] .toggle-indicator {
+    transform: rotate(90deg);
+  }
+
+  .fees-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .calc-btn-row {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Summary section ────────────────────────────────────────────────────── */
+  .summary-section {
+    border: 1px solid var(--border);
+  }
+
+  .summary-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-card:nth-child(n) {
+    border-bottom: none;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Breakdown bar ──────────────────────────────────────────────────────── */
+  .breakdown-bar-wrap {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .breakdown-bar {
+    display: flex;
+    height: 12px;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .bar-segment {
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+
+  .bar-principal {
+    background: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .bar-interest {
+    background: var(--fg);
+    opacity: 0.75;
+  }
+
+  .bar-fees {
+    background: var(--fg-dim);
+    opacity: 0.3;
+  }
+
+  .bar-legend {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+  }
+
+  .dot-principal {
+    background: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .dot-interest {
+    background: var(--fg);
+    opacity: 0.75;
+  }
+
+  .dot-fees {
+    background: var(--fg-dim);
+    opacity: 0.3;
+  }
+
+  /* ── Schedule section ───────────────────────────────────────────────────── */
+  .schedule-section {
+    border: 1px solid var(--border);
+  }
+
+  .schedule-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .amort-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+
+  .amort-table th {
+    padding: 0.4rem 0.75rem;
+    text-align: right;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    white-space: nowrap;
+  }
+
+  .amort-table th:first-child {
+    text-align: left;
+  }
+
+  :global(.amort-table td) {
+    padding: 0.35rem 0.75rem;
+    text-align: right;
+    color: var(--fg);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  :global(.amort-table td:first-child) {
+    text-align: left;
+    color: var(--fg-dim);
+  }
+
+  :global(.amort-table tbody tr:last-child td) {
+    border-bottom: none;
+  }
+
+  :global(.interest-heavy td:nth-child(4)) {
+    color: var(--fg);
+    opacity: 0.65;
+  }
+
+  /* ── Shared ─────────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    cursor: pointer;
+  }
+
+  .toggle-label input[type='checkbox'] {
+    accent-color: var(--fg);
+    cursor: pointer;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+</style>

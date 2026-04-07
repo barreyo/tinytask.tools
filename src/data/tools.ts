@@ -367,4 +367,168 @@ export const tools: Tool[] = [
       },
     ],
   },
+  {
+    slug: 'csv-json',
+    name: 'CSV ↔ JSON Converter',
+    description:
+      'Convert between CSV and JSON instantly in the browser — paste either format and convert with one click.',
+    metaDescription:
+      'Free online CSV to JSON converter (and JSON to CSV) — paste either format and convert instantly. Auto-detects delimiter. Runs entirely in your browser, no data leaves your device.',
+    tags: ['csv', 'json', 'convert', 'data'],
+    implemented: true,
+    faq: [
+      {
+        q: 'Can it auto-detect the delimiter?',
+        a: 'Yes. When delimiter is set to "auto", PapaParse samples the file and picks the most likely delimiter (comma, tab, semicolon, or pipe). You can also override it manually.',
+      },
+      {
+        q: 'What JSON structure does the converter expect?',
+        a: 'JSON → CSV requires a top-level array of objects. Each object becomes a row; its keys become column headers. Nested objects are serialised as strings.',
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All parsing and conversion runs in your browser using the PapaParse library. Nothing is transmitted.',
+      },
+    ],
+  },
+  {
+    slug: 'interest-calculator',
+    name: 'Interest / APR Calculator',
+    description:
+      'Calculate loan amortization, daily interest accrual, and total cost for credit cards, BNPL, mortgages, and more.',
+    metaDescription:
+      'Free online interest and APR calculator — compute amortization schedules, total interest, and effective APR for credit cards, BNPL, mortgages, and personal loans. Runs in your browser.',
+    tags: ['finance', 'interest', 'apr', 'loan', 'mortgage', 'bnpl'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is APR vs interest rate?',
+        a: 'The interest rate is the annual cost of borrowing the principal. APR (Annual Percentage Rate) includes interest plus fees, giving a more complete picture of the true cost of borrowing.',
+      },
+      {
+        q: 'How is daily interest calculated?',
+        a: 'Daily interest = (APR / 365) × outstanding balance. This is the method used by most credit cards and many BNPL providers. The tool accrues interest daily and applies it according to your payment frequency.',
+      },
+      {
+        q: 'What is an amortization schedule?',
+        a: 'An amortization schedule breaks each payment into its principal and interest components. Early payments are mostly interest; later payments are mostly principal. The table shows exactly how your balance shrinks over time.',
+      },
+      {
+        q: 'What is a fixed fee vs origination fee?',
+        a: 'A fixed fee (e.g. a monthly maintenance fee) recurs each period. An origination fee is a one-time charge applied at the start of the loan, often expressed as a percentage of the principal.',
+      },
+    ],
+  },
+  {
+    slug: 'password-generator',
+    name: 'Password / Secret Generator',
+    description:
+      'Generate cryptographically random passwords and secrets using the Web Crypto API — configurable length, character sets, and batch mode.',
+    metaDescription:
+      'Free online password generator — create cryptographically random passwords with configurable length, uppercase, lowercase, digits, symbols, and batch mode. Uses the Web Crypto API; nothing leaves your browser.',
+    tags: ['password', 'security', 'crypto', 'generate', 'random'],
+    implemented: true,
+    faq: [
+      {
+        q: 'Is this truly random?',
+        a: "Yes. The generator uses crypto.getRandomValues(), which is the Web Crypto API's cryptographically secure pseudo-random number generator (CSPRNG). It is suitable for generating passwords, API keys, and secrets.",
+      },
+      {
+        q: 'What does "exclude ambiguous characters" do?',
+        a: 'It removes characters that are visually similar: 0 and O, l and 1 and I. This prevents copy/transcription mistakes when reading passwords aloud or on low-resolution displays.',
+      },
+      {
+        q: 'How is password strength measured?',
+        a: 'Strength is estimated using Shannon entropy: log₂(charset_size ^ length) bits. More bits = harder to brute-force. A good password has at least 60–80 bits of entropy.',
+      },
+    ],
+  },
+  {
+    slug: 'rsa-keygen',
+    name: 'RSA Key Pair Generator',
+    description:
+      'Generate RSA public/private key pairs for encryption or signing in the browser — keys never touch a server.',
+    metaDescription:
+      'Free online RSA key pair generator — generate 2048 or 4096-bit RSA keys for encryption (RSA-OAEP) or signing (RSASSA-PKCS1-v1_5) and export as PEM. Runs entirely in your browser using the Web Crypto API.',
+    tags: ['rsa', 'crypto', 'security', 'key', 'pem', 'encryption'],
+    implemented: true,
+    faq: [
+      {
+        q: 'Are the generated keys ever sent to a server?',
+        a: "No. Key generation uses the browser's built-in Web Crypto API (crypto.subtle.generateKey). The keys exist only in memory and are exported as PEM strings in your browser. Nothing is transmitted.",
+      },
+      {
+        q: 'What is the difference between RSA-OAEP and RSASSA-PKCS1-v1_5?',
+        a: 'RSA-OAEP is used for encryption — you encrypt data with the public key and decrypt with the private key. RSASSA-PKCS1-v1_5 is used for digital signing — you sign with the private key and verify with the public key.',
+      },
+      {
+        q: 'What key size should I use?',
+        a: '2048-bit keys are the current minimum recommended size and generate quickly. 4096-bit keys provide a larger security margin but take longer to generate and are slower during use. For most development and testing purposes 2048-bit is sufficient.',
+      },
+      {
+        q: 'What PEM formats are exported?',
+        a: 'The public key is exported in SPKI format (SubjectPublicKeyInfo), the standard format for sharing public keys. The private key is exported in PKCS#8 format, the standard for storing private keys. Both are Base64-encoded with PEM headers.',
+      },
+    ],
+  },
+  {
+    slug: 'text-counter',
+    name: 'Character / Word Counter',
+    description:
+      'Live character, word, sentence, and byte counts with reading time, speaking time, and SMS segment detection.',
+    metaDescription:
+      'Free online character and word counter — live counts for characters, words, sentences, paragraphs, bytes, SMS segments, reading time, and speaking time. Runs entirely in your browser.',
+    tags: ['text', 'counter', 'word count', 'sms', 'reading time'],
+    implemented: true,
+    faq: [
+      {
+        q: 'How is reading time calculated?',
+        a: 'Reading time uses an average adult silent reading speed of 238 words per minute (WPM). Speaking time uses 150 WPM, a typical presentation or narration pace.',
+      },
+      {
+        q: 'How are SMS segments counted?',
+        a: 'A single SMS using GSM-7 encoding holds 160 characters. If the message contains characters outside the GSM-7 character set (e.g. emoji, accented letters outside the set), UCS-2 encoding is used and the limit drops to 70 characters per segment. Multi-part messages use 153 (GSM-7) or 67 (UCS-2) characters per segment to accommodate the concatenation header.',
+      },
+      {
+        q: 'What does the byte count represent?',
+        a: "Bytes are counted using UTF-8 encoding via the browser's TextEncoder API. ASCII characters are 1 byte, most European characters 2 bytes, emoji and many CJK characters 3–4 bytes.",
+      },
+    ],
+  },
+  {
+    slug: 'qr-code-generator',
+    name: 'QR Code Generator',
+    description:
+      'Generate styled QR codes for URLs or text with custom dot shapes, corner styles, colour gradients, and an optional centre logo.',
+    metaDescription:
+      'Free online QR code generator — customise dot shapes, corner styles, colours, gradients, and embed a logo. Download as PNG or SVG. Runs entirely in your browser.',
+    tags: ['qr', 'qrcode', 'generate', 'image', 'url', 'mobile'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is error correction and which level should I choose?',
+        a: 'Error correction adds redundant data so a QR code can still be scanned even if part of it is damaged or obscured. Level L (7%) gives the smallest code, M (15%) is a good general default, Q (25%) is recommended when you embed a logo, and H (30%) offers the highest resilience at the cost of a larger, denser code.',
+      },
+      {
+        q: 'Why does the tool upgrade my error correction when I add a logo?',
+        a: 'A centre logo physically covers QR modules. With low error correction (L or M) those hidden modules cannot be recovered, making the code unscannable. The tool automatically raises the level to at least Q (25%) so enough redundant data remains around the logo for scanners to reconstruct the full payload.',
+      },
+      {
+        q: 'What image formats can I embed as a logo?',
+        a: 'You can upload PNG, JPEG, or SVG files. For best results use a PNG or SVG with a transparent background so the logo sits cleanly on the QR code background colour.',
+      },
+      {
+        q: 'What is the difference between PNG and SVG export?',
+        a: 'PNG is a raster format — ideal for sharing on the web or printing at a fixed size. SVG is vector-based and scales to any size without losing sharpness, making it the better choice for print or when you need to resize the QR code frequently.',
+      },
+      {
+        q: 'How much data can a QR code hold?',
+        a: 'It depends on the content type and error correction level. A QR code can store up to ~7,000 numeric characters, ~4,300 alphanumeric characters, or ~2,900 bytes of binary data (like a URL) at the lowest error correction. Higher error correction and longer content produce a denser, higher-version QR code with more modules.',
+      },
+      {
+        q: 'Will styled or rounded QR codes scan reliably?',
+        a: 'Yes — modern smartphone cameras and QR scanner apps handle rounded dots, classy shapes, and colour-filled codes well. For maximum compatibility keep sufficient contrast between the dot colour and the background, and avoid extremely light dot colours on white backgrounds.',
+      },
+    ],
+  },
 ];

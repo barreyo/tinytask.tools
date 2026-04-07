@@ -21,9 +21,12 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@types/papaparse": "^5.5.2",
     "astro": "^6.1.4",
     "diff": "^8.0.4",
     "js-yaml": "^4.1.1",
+    "papaparse": "^5.5.3",
+    "qr-code-styling": "^1.9.2",
     "svgo": "^4.0.1",
     "uuid": "^13.0.0"
   },
