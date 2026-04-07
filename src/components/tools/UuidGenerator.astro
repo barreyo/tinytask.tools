@@ -1,0 +1,163 @@
+---
+// No server-side imports needed — this tool is fully client-side
+---
+
+<div class="uuid-tool">
+  <div class="output-row">
+    <output id="uuid-output" class="uuid-output" aria-live="polite" aria-label="Generated UUID"
+    ></output>
+    <button id="copy-btn" class="action-btn" aria-label="Copy UUID to clipboard">copy</button>
+  </div>
+
+  <div class="controls">
+    <button id="generate-btn" class="action-btn primary">generate</button>
+    <label class="count-label">
+      <span class="label-text">batch</span>
+      <input id="batch-count" class="count-input" type="number" min="1" max="100" value="1" />
+    </label>
+  </div>
+
+  <div id="batch-output" class="batch-output" aria-live="polite"></div>
+</div>
+
+<script>
+  function uuidv4(): string {
+    return crypto.randomUUID();
+  }
+
+  const outputEl = document.getElementById('uuid-output') as HTMLOutputElement;
+  const batchEl = document.getElementById('batch-output') as HTMLDivElement;
+  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const countInput = document.getElementById('batch-count') as HTMLInputElement;
+
+  function generate() {
+    const count = Math.min(Math.max(parseInt(countInput.value, 10) || 1, 1), 100);
+
+    if (count === 1) {
+      const id = uuidv4();
+      outputEl.textContent = id;
+      batchEl.textContent = '';
+    } else {
+      const ids = Array.from({ length: count }, uuidv4);
+      outputEl.textContent = '';
+      batchEl.textContent = ids.join('\n');
+    }
+  }
+
+  async function copyOutput() {
+    const text =
+      batchEl.textContent?.trim() || outputEl.textContent?.trim() || '';
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  }
+
+  generateBtn.addEventListener('click', generate);
+  copyBtn.addEventListener('click', copyOutput);
+
+  // Generate one on load
+  generate();
+</script>
+
+<style>
+  .uuid-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .output-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+  }
+
+  .uuid-output {
+    flex: 1;
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    color: var(--fg);
+    word-break: break-all;
+    min-height: 1.2em;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.1s, color 0.1s;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  .count-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .count-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.5rem;
+    width: 4rem;
+    text-align: right;
+  }
+
+  .count-input:focus {
+    outline: 1px solid var(--fg);
+    outline-offset: 2px;
+  }
+
+  .batch-output {
+    font-size: 0.8rem;
+    line-height: 1.8;
+    color: var(--fg);
+    white-space: pre;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    display: none;
+  }
+
+  .batch-output:not(:empty) {
+    display: block;
+  }
+</style>

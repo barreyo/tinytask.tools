@@ -1,0 +1,81 @@
+---
+import Layout from './Layout.astro';
+import { tools } from '../data/tools';
+
+interface Props {
+  slug: string;
+}
+
+const { slug } = Astro.props;
+const tool = tools.find((t) => t.slug === slug);
+---
+
+<Layout title={tool?.name} description={tool?.description}>
+  <div class="tool-page">
+    <nav class="tool-nav">
+      <a href="/" class="back-link">← tinytask.tools</a>
+    </nav>
+
+    <header class="tool-header">
+      <h1 class="tool-title">{tool?.name}</h1>
+      {tool?.description && <p class="tool-desc">{tool.description}</p>}
+    </header>
+
+    <div class="tool-body">
+      <slot />
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .tool-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .tool-nav {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .back-link {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .back-link:hover {
+    color: var(--fg);
+  }
+
+  .tool-header {
+    padding: 2rem 0 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tool-title {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+  }
+
+  .tool-desc {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+
+  .tool-body {
+    flex: 1;
+    padding: 2rem 0;
+  }
+</style>

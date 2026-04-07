@@ -1,0 +1,44 @@
+---
+import type { Tool } from '../data/tools';
+
+interface Props {
+  tool: Tool;
+}
+
+const { tool } = Astro.props;
+---
+
+<a href={`/tools/${tool.slug}`} class="tool-card">
+  <span class="tool-name">{tool.name}</span>
+  <span class="tool-desc">{tool.description}</span>
+</a>
+
+<style>
+  .tool-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.1s;
+  }
+
+  .tool-card:hover {
+    border-color: var(--border-active);
+  }
+
+  .tool-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: 0.02em;
+  }
+
+  .tool-desc {
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+</style>

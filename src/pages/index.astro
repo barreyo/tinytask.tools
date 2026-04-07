@@ -1,0 +1,53 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ToolCard from '../components/ToolCard.astro';
+import { tools } from '../data/tools';
+---
+
+<Layout description="tinytask.tools — a collection of small utilities.">
+  <div class="page">
+    <header class="site-header">
+      <span class="site-name">tinytask.tools</span>
+      <span class="site-tagline">small utilities, no noise</span>
+    </header>
+
+    <div class="tool-grid">
+      {tools.map((tool) => <ToolCard tool={tool} />)}
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .site-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .site-name {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+  }
+
+  .site-tagline {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+</style>

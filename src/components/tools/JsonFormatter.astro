@@ -1,0 +1,529 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="jf-tool">
+  <!-- Input pane -->
+  <div class="jf-pane jf-pane--input">
+    <div class="jf-pane-header">
+      <span class="jf-pane-label">input</span>
+      <div class="jf-pane-actions">
+        <button id="jf-upload-btn" class="action-btn" aria-label="Upload JSON file">upload</button>
+        <input
+          id="jf-file-input"
+          type="file"
+          accept=".json,.txt"
+          aria-hidden="true"
+          tabindex="-1"
+        />
+        <button id="jf-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="jf-editor-wrap">
+      <textarea
+        id="jf-input"
+        class="jf-textarea"
+        placeholder="Paste JSON here…"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="JSON input"></textarea>
+    </div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="jf-pane jf-pane--output">
+    <div class="jf-pane-header">
+      <span class="jf-pane-label">output</span>
+      <div class="jf-pane-actions">
+        <button
+          id="jf-copy-btn"
+          class="action-btn"
+          disabled
+          aria-label="Copy formatted JSON to clipboard">copy</button
+        >
+        <button
+          id="jf-download-btn"
+          class="action-btn"
+          disabled
+          aria-label="Download formatted JSON as file">download</button
+        >
+      </div>
+    </div>
+    <div
+      id="jf-output"
+      class="jf-output"
+      aria-live="polite"
+      aria-label="Formatted JSON output"
+      class="p-4"
+    >
+      <span class="jf-placeholder">formatted output will appear here</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('jf-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('jf-output') as HTMLDivElement;
+  const uploadBtn = document.getElementById('jf-upload-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('jf-file-input') as HTMLInputElement;
+  const clearBtn = document.getElementById('jf-clear-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('jf-copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('jf-download-btn') as HTMLButtonElement;
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let formattedJson = '';
+
+  // ── Error position extraction ────────────────────────────────────────────────
+  interface ParseError {
+    message: string;
+    offset: number | null; // character offset in source
+  }
+
+  function extractErrorOffset(src: string, err: SyntaxError): ParseError {
+    const msg = err.message;
+
+    // V8: "Unexpected token '}', ..."at position 42"
+    let m = msg.match(/at position (\d+)/);
+    if (m) return { message: msg, offset: parseInt(m[1], 10) };
+
+    // V8 older: "Unexpected end of JSON input" (no position)
+    // Firefox: "JSON.parse: ... at line N column N of the JSON data"
+    m = msg.match(/at line (\d+) column (\d+)/);
+    if (m) {
+      const line = parseInt(m[1], 10) - 1;
+      const col = parseInt(m[2], 10) - 1;
+      const lines = src.split('\n');
+      let off = 0;
+      for (let i = 0; i < line && i < lines.length; i++) off += lines[i].length + 1;
+      off += col;
+      return { message: msg, offset: off };
+    }
+
+    // Safari: "JSON Parse error: ... at character N"
+    m = msg.match(/at character (\d+)/);
+    if (m) return { message: msg, offset: parseInt(m[1], 10) };
+
+    return { message: msg, offset: null };
+  }
+
+  function offsetToLineCol(src: string, offset: number): { line: number; col: number } {
+    const before = src.slice(0, offset);
+    const lines = before.split('\n');
+    return { line: lines.length - 1, col: lines[lines.length - 1].length };
+  }
+
+  // ── Syntax highlighting ──────────────────────────────────────────────────────
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function highlightJson(json: string): string {
+    // First escape the entire string for HTML safety, then apply span wrapping.
+    // We escape the full source first so all structural characters are safe,
+    // then we run the regex on the escaped text (strings appear as &quot;...&quot;).
+    const escaped = escapeHtml(json);
+    const quot = '&quot;';
+
+    // Regex operates on the HTML-escaped form where " → &quot;
+    const strPat = `(${quot}(?:\\\\.|(?!${quot})[^\\\\])*${quot})`;
+    const re = new RegExp(
+      `${strPat}(\\s*:)?|(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)|\\b(true|false)\\b|\\b(null)\\b`,
+      'g',
+    );
+
+    return escaped.replace(re, (match, str, colon, num, bool, nul) => {
+      if (str !== undefined) {
+        if (colon !== undefined) return `<span class="jf-key">${str}</span>${colon}`;
+        return `<span class="jf-string">${str}</span>`;
+      }
+      if (num !== undefined) return `<span class="jf-number">${num}</span>`;
+      if (bool !== undefined) return `<span class="jf-bool">${bool}</span>`;
+      if (nul !== undefined) return `<span class="jf-null">${nul}</span>`;
+      return match;
+    });
+  }
+
+  function renderWithLineNumbers(html: string, errorLineIndex: number | null): string {
+    const lines = html.split('\n');
+    const rows = lines.map((line, i) => {
+      const isError = i === errorLineIndex;
+      const rowClass = isError ? ' class="jf-line--error"' : '';
+      const lineNum = `<span class="jf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+      return `<div${rowClass}>${lineNum}<span class="jf-lc">${line || '\u00a0'}</span></div>`;
+    });
+    return rows.join('');
+  }
+
+  // ── Auto-fix common JSON mistakes ────────────────────────────────────────────
+  function autoFix(src: string): string {
+    let s = src;
+
+    // Remove trailing commas before } or ]
+    // Handles multi-line and whitespace between comma and closing bracket
+    s = s.replace(/,(\s*[}\]])/g, '$1');
+
+    // Convert single-quoted strings to double-quoted.
+    // Matches 'content' where content may contain escaped chars or anything except unescaped '
+    s = s.replace(/'((?:[^'\\]|\\.)*)'/g, (_match, inner: string) => {
+      // Escape any bare double quotes that aren't already escaped
+      const escaped = inner.replace(/(?<!\\)"/g, '\\"');
+      return `"${escaped}"`;
+    });
+
+    return s;
+  }
+
+  // ── Main format/validate function ────────────────────────────────────────────
+  function process() {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      formattedJson = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      outputEl.innerHTML = '<span class="jf-placeholder">formatted output will appear here</span>';
+      return;
+    }
+
+    // Apply auto-fixes before parsing; fall back to original if fixes break things further
+    const fixed = autoFix(src);
+
+    try {
+      const parsed = JSON.parse(fixed);
+      formattedJson = JSON.stringify(parsed, null, 2);
+
+      const highlightedClean = highlightJson(formattedJson);
+
+      outputEl.innerHTML = `<pre class="jf-pre">${renderWithLineNumbers(highlightedClean, null)}</pre>`;
+      outputEl.classList.remove('jf-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } catch (err) {
+      formattedJson = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+
+      // Use fixed source for position extraction since that's what was parsed
+      const { message, offset } = extractErrorOffset(fixed, err as SyntaxError);
+
+      if (offset !== null) {
+        const { line: errLine, col: errCol } = offsetToLineCol(fixed, offset);
+        const srcLines = fixed.split('\n');
+
+        const rows: string[] = srcLines.map((rawLine, i) => {
+          const isError = i === errLine;
+          const rowClass = isError ? ' class="jf-line--error"' : '';
+          const lineNum = `<span class="jf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+          const lineContent = `<span class="jf-lc">${escapeHtml(rawLine) || '\u00a0'}</span>`;
+          let row = `<div${rowClass}>${lineNum}${lineContent}</div>`;
+
+          if (isError) {
+            // Caret row
+            const caretPad = '\u00a0'.repeat(errCol);
+            const caretRow = `<div class="jf-line--caret"><span class="jf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="jf-lc">${caretPad}<span class="jf-caret">^</span></span></div>`;
+            // Error message row
+            const msgRow = `<div class="jf-line--msg"><span class="jf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="jf-lc jf-error-msg">${escapeHtml(cleanErrorMessage(message))}</span></div>`;
+            row += caretRow + msgRow;
+          }
+
+          return row;
+        });
+
+        outputEl.innerHTML = `<pre class="jf-pre">${rows.join('')}</pre>`;
+      } else {
+        // No position info — just show error message
+        outputEl.innerHTML = `<pre class="jf-pre"><div class="jf-line--msg"><span class="jf-lc jf-error-msg">${escapeHtml(cleanErrorMessage(message))}</span></div></pre>`;
+      }
+
+      outputEl.classList.add('jf-output--error');
+
+      // Scroll error line into view
+      const errorLineEl = outputEl.querySelector('.jf-line--error');
+      if (errorLineEl) {
+        errorLineEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+
+  function cleanErrorMessage(msg: string): string {
+    // Strip leading "JSON.parse: " or "JSON Parse error: " prefixes for brevity
+    return msg.replace(/^JSON\.parse:\s*/i, '').replace(/^JSON Parse error:\s*/i, '');
+  }
+
+  // ── Debounce ─────────────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function debouncedProcess() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  uploadBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      inputEl.value = (e.target?.result as string) ?? '';
+      process();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!formattedJson) return;
+    await navigator.clipboard.writeText(formattedJson);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!formattedJson) return;
+    const blob = new Blob([formattedJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'formatted.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  inputEl.addEventListener('input', debouncedProcess);
+</script>
+
+<style>
+  /* ── Tool-specific design tokens ─────────────────────────────────────────── */
+  .jf-tool {
+    --json-key: #c8b4f0;
+    --json-string: #7ec8a0;
+    --json-number: #d4a96a;
+    --json-bool: #7aabcc;
+    --json-null: #666;
+    --json-error-bg: rgba(200, 50, 50, 0.12);
+    --json-error-fg: #f07070;
+    --json-caret: #f07070;
+    --json-ln: #3a3a3a;
+
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  /* ── Two-pane layout ─────────────────────────────────────────────────────── */
+  .jf-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .jf-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .jf-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .jf-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Shared action button (mirrors UuidGenerator pattern) ────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* ── Input pane ──────────────────────────────────────────────────────────── */
+  .jf-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .jf-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .jf-textarea::placeholder {
+    color: var(--json-ln);
+  }
+
+  /* ── File input hidden ───────────────────────────────────────────────────── */
+  #jf-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ── Output pane ─────────────────────────────────────────────────────────── */
+  .jf-output {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  :global(.jf-placeholder) {
+    display: block;
+    padding: 0.75rem 1rem 0.75rem 0.75rem;
+    color: var(--json-ln);
+    font-size: 0.8rem;
+  }
+
+  /* ── All output content is injected via innerHTML at runtime, so it lacks the
+     Astro scoped attribute. Every rule below uses :global() so it applies.
+  ── */
+  :global(.jf-pre) {
+    margin: 0;
+    padding: 0.5rem 0 0.5rem 0.5rem;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+  }
+
+  :global(.jf-pre > div) {
+    display: flex;
+    min-height: 1.6em;
+  }
+
+  :global(.jf-ln) {
+    display: inline-block;
+    width: 3.5rem;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border);
+    color: var(--json-ln);
+    user-select: none;
+    font-size: 0.75rem;
+  }
+
+  :global(.jf-lc) {
+    flex: 1;
+    padding-left: 0.75rem;
+    padding-right: 1rem;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  :global(.jf-line--error) {
+    background: var(--json-error-bg);
+  }
+
+  :global(.jf-line--caret .jf-lc) {
+    color: var(--json-caret);
+    white-space: pre;
+  }
+  :global(.jf-key) {
+    color: var(--json-key);
+    font-weight: 600;
+  }
+
+  :global(.jf-string) {
+    color: var(--json-string);
+  }
+
+  :global(.jf-number) {
+    color: var(--json-number);
+  }
+
+  :global(.jf-bool) {
+    color: var(--json-bool);
+  }
+
+  :global(.jf-null) {
+    color: var(--json-null);
+  }
+
+  :global(.jf-caret) {
+    color: var(--json-caret);
+    font-weight: bold;
+  }
+
+  :global(.jf-error-msg) {
+    color: var(--json-error-fg);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Mobile: stack panes vertically ─────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .jf-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .jf-pane {
+      height: 300px;
+    }
+  }
+</style>

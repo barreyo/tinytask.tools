@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+
+/* ─── Reset border-radius everywhere ────────────────────────────────────────── */
+*,
+::before,
+::after {
+  border-radius: 0 !important;
+  box-sizing: border-box;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #0a0a0a;
+  --fg: #e8e8e8;
+  --fg-dim: #666;
+  --border: #2a2a2a;
+  --border-active: #e8e8e8;
+  --font-mono: 'Berkeley Mono', 'TX-02', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo,
+    Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── Skip link ──────────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.1s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ─── Focus visible ──────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
+}
+
+/* ─── Smooth scrolling ───────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Interactive elements ───────────────────────────────────────────────────── */
+button,
+[role='button'],
+label[for],
+summary {
+  cursor: pointer;
+}

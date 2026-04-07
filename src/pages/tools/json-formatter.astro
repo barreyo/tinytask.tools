@@ -1,0 +1,16 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import JsonFormatter from '../../components/tools/JsonFormatter.astro';
+---
+
+<ToolLayout slug="json-formatter">
+  <JsonFormatter />
+</ToolLayout>
+
+<style is:global>
+  /* Widen the tool page only for the JSON formatter */
+  body:has(#jf-input) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

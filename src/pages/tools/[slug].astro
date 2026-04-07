@@ -1,0 +1,22 @@
+---
+/**
+ * Catch-all for tool slugs that exist in the registry but don't yet have
+ * a dedicated page file. Redirects back to the homepage.
+ *
+ * To implement a tool:
+ *   1. Create src/pages/tools/{slug}.astro
+ *   2. Create src/components/tools/MyTool.astro with the tool UI and <script>
+ *   3. Set `implemented: true` on the entry in src/data/tools.ts
+ *
+ * Astro will match the specific file first; this catch-all won't fire for it.
+ */
+import { tools } from '../../data/tools';
+
+export function getStaticPaths() {
+  return tools
+    .filter((t) => !t.implemented)
+    .map((tool) => ({ params: { slug: tool.slug } }));
+}
+
+return Astro.redirect('/', 307);
+---
