@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+    - cron: '0 0 * * *'
 
 # Restrict default token permissions to read-only across all jobs
 permissions:
