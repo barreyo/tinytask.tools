@@ -7,8 +7,11 @@ import { tools } from '../data/tools';
 <Layout description="tinytask.tools — a collection of small utilities.">
   <div class="page">
     <header class="site-header">
+      <div class="site-logo" aria-label="tinytask.tools">
+        <span class="logo-tt">tt</span><span class="logo-cursor" aria-hidden="true">_</span>
+      </div>
       <span class="site-name">tinytask.tools</span>
-      <span class="site-tagline">small utilities, no noise</span>
+      <span class="site-tagline">small browser-only utilities</span>
     </header>
 
     <div class="tool-grid">
@@ -32,11 +35,44 @@ import { tools } from '../data/tools';
     border-bottom: 1px solid var(--border);
   }
 
-  .site-name {
-    font-size: 1rem;
+  .site-logo {
+    font-size: 2rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: -0.02em;
     color: var(--fg);
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+
+  .logo-tt {
+    color: var(--fg);
+  }
+
+  .logo-cursor {
+    color: var(--fg);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .logo-cursor {
+      animation: cursor-blink 1s step-start infinite;
+    }
+  }
+
+  @keyframes cursor-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .site-name {
+    font-size: 0.8rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
   }
 
   .site-tagline {

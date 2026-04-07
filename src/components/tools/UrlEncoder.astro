@@ -1,0 +1,745 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="ue-tool">
+  <!-- Mode selector -->
+  <div class="mode-selector" role="group" aria-label="Conversion mode">
+    <span class="section-label">mode</span>
+    <div class="mode-btns">
+      <button class="mode-btn active" data-mode="component">encode component</button>
+      <button class="mode-btn" data-mode="uri">encode uri</button>
+      <button class="mode-btn" data-mode="decode">decode</button>
+    </div>
+  </div>
+
+  <!-- Two-pane editor -->
+  <div class="ue-panes">
+    <!-- Input pane -->
+    <div class="ue-pane ue-pane--input">
+      <div class="ue-pane-header">
+        <span class="ue-pane-label">input</span>
+        <button id="ue-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+      <textarea
+        id="ue-input"
+        class="ue-textarea"
+        placeholder="Paste text or URL here…"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="URL encoder input"></textarea>
+    </div>
+
+    <!-- Output pane -->
+    <div class="ue-pane ue-pane--output">
+      <div class="ue-pane-header">
+        <span class="ue-pane-label">output</span>
+        <button id="ue-copy-btn" class="action-btn" disabled aria-label="Copy output to clipboard"
+          >copy</button
+        >
+      </div>
+      <div id="ue-output" class="ue-output" aria-live="polite" aria-label="Converted output">
+        <span class="ue-placeholder">output will appear here</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- URL breakdown (decode mode + valid URL only) -->
+  <div id="ue-breakdown" class="ue-breakdown" hidden>
+    <div class="breakdown-header">
+      <span class="section-label">url breakdown</span>
+    </div>
+    <div id="ue-breakdown-body" class="breakdown-body"></div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="section-label">history</span>
+      <button id="ue-clear-history-btn" class="action-btn">clear</button>
+    </div>
+    <div id="ue-history-list" class="history-list" aria-label="Conversion history"></div>
+    <p id="ue-history-empty" class="history-empty">no history yet</p>
+  </div>
+</div>
+
+<script>
+  import {
+    convert,
+    escapeHtml,
+    highlightUrl,
+    mergeHistory,
+    parseUrl,
+    pruneHistory,
+    truncate,
+    formatAge,
+    type EncodeMode,
+    type HistoryEntry,
+  } from '../../lib/url-encoder';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('ue-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('ue-output') as HTMLDivElement;
+  const clearBtn = document.getElementById('ue-clear-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('ue-copy-btn') as HTMLButtonElement;
+  const breakdownEl = document.getElementById('ue-breakdown') as HTMLDivElement;
+  const breakdownBody = document.getElementById('ue-breakdown-body') as HTMLDivElement;
+  const historyList = document.getElementById('ue-history-list') as HTMLDivElement;
+  const historyEmpty = document.getElementById('ue-history-empty') as HTMLParagraphElement;
+  const clearHistoryBtn = document.getElementById('ue-clear-history-btn') as HTMLButtonElement;
+  const modeBtns = document.querySelectorAll<HTMLButtonElement>('.mode-btn');
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let currentMode: EncodeMode = 'component';
+  let currentOutput = '';
+  const STORAGE_KEY = 'tt_url_history';
+
+  // ── Mode selection ────────────────────────────────────────────────────────────
+  function setMode(mode: EncodeMode): void {
+    currentMode = mode;
+    modeBtns.forEach((btn) => btn.classList.toggle('active', btn.dataset.mode === mode));
+    process();
+  }
+
+  modeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode as EncodeMode));
+  });
+
+  // ── Conversion ────────────────────────────────────────────────────────────────
+  function process(): void {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      currentOutput = '';
+      copyBtn.disabled = true;
+      outputEl.innerHTML = '<span class="ue-placeholder">output will appear here</span>';
+      outputEl.classList.remove('ue-output--error');
+      breakdownEl.hidden = true;
+      return;
+    }
+
+    const { output, error } = convert(src, currentMode);
+
+    if (error) {
+      currentOutput = '';
+      copyBtn.disabled = true;
+      outputEl.innerHTML = `<span class="ue-error">${escapeHtml(cleanError(error))}</span>`;
+      outputEl.classList.add('ue-output--error');
+      breakdownEl.hidden = true;
+      return;
+    }
+
+    currentOutput = output;
+    copyBtn.disabled = false;
+    outputEl.classList.remove('ue-output--error');
+
+    if (currentMode === 'decode') {
+      const parsed = parseUrl(output);
+      if (parsed.isUrl) {
+        outputEl.innerHTML = `<span class="url-highlighted">${highlightUrl(parsed)}</span>`;
+        renderBreakdown(parsed);
+        breakdownEl.hidden = false;
+      } else {
+        outputEl.textContent = output;
+        breakdownEl.hidden = true;
+      }
+    } else {
+      outputEl.textContent = output;
+      breakdownEl.hidden = true;
+    }
+  }
+
+  function cleanError(msg: string): string {
+    return msg.replace(/^URIError:\s*/i, '');
+  }
+
+  // ── URL breakdown ─────────────────────────────────────────────────────────────
+  function renderBreakdown(parsed: ReturnType<typeof parseUrl>): void {
+    const e = escapeHtml;
+    const rows: string[] = [];
+
+    const part = (label: string, value: string, cls: string) =>
+      `<div class="bd-row"><span class="bd-label">${label}</span><span class="bd-value ${cls}">${e(value)}</span></div>`;
+
+    if (parsed.scheme) rows.push(part('scheme', parsed.scheme, 'bd-scheme'));
+    if (parsed.userinfo) rows.push(part('userinfo', parsed.userinfo, 'bd-userinfo'));
+    if (parsed.host) rows.push(part('host', parsed.host, 'bd-host'));
+    if (parsed.port) rows.push(part('port', parsed.port, 'bd-port'));
+    if (parsed.path) rows.push(part('path', parsed.path, 'bd-path'));
+    if (parsed.fragment !== null) rows.push(part('fragment', parsed.fragment, 'bd-fragment'));
+
+    if (parsed.params.length > 0) {
+      rows.push(
+        `<div class="bd-params-header"><span class="section-label">params (${parsed.params.length})</span></div>`,
+      );
+      parsed.params.forEach((p, i) => {
+        rows.push(
+          `<div class="bd-row bd-param-row">` +
+            `<span class="bd-label bd-param-index">${i + 1}</span>` +
+            `<span class="bd-param-key">${e(p.key)}</span>` +
+            `<span class="bd-punct">=</span>` +
+            `<span class="bd-param-val">${e(p.value)}</span>` +
+            `<button class="action-btn bd-copy-btn" data-value="${e(p.value)}" aria-label="Copy value">copy</button>` +
+            `</div>`,
+        );
+      });
+    }
+
+    breakdownBody.innerHTML = rows.join('');
+
+    breakdownBody.querySelectorAll<HTMLButtonElement>('.bd-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(btn.dataset.value ?? '');
+        btn.textContent = 'copied';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+        }, 1200);
+      });
+    });
+  }
+
+  // ── Debounce ──────────────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      process();
+    }, 150);
+  });
+
+  // ── Save to history on blur (when user leaves the input) ──────────────────────
+  inputEl.addEventListener('blur', () => {
+    if (inputEl.value.trim() && currentOutput) {
+      appendHistory({
+        input: inputEl.value,
+        output: currentOutput,
+        mode: currentMode,
+        timestamp: Date.now(),
+      });
+    }
+  });
+
+  // ── Copy ──────────────────────────────────────────────────────────────────────
+  copyBtn.addEventListener('click', async () => {
+    if (!currentOutput) return;
+    await navigator.clipboard.writeText(currentOutput);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  // ── Clear input ───────────────────────────────────────────────────────────────
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    process();
+    inputEl.focus();
+  });
+
+  // ── History ───────────────────────────────────────────────────────────────────
+  function loadHistory(): HistoryEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistory(entries: HistoryEntry[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pruneHistory(entries)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function appendHistory(entry: HistoryEntry): void {
+    const existing = loadHistory();
+    // Deduplicate: skip if identical input+mode already at the top
+    if (existing[0]?.input === entry.input && existing[0]?.mode === entry.mode) return;
+    const updated = mergeHistory([entry], existing);
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  function renderHistory(entries: HistoryEntry[]): void {
+    if (entries.length === 0) {
+      historyList.innerHTML = '';
+      historyEmpty.hidden = false;
+      return;
+    }
+    historyEmpty.hidden = true;
+    historyList.innerHTML = entries
+      .map(
+        (e, i) => `
+      <div class="history-row" data-index="${i}">
+        <span class="history-badge">${e.mode}</span>
+        <span class="history-io">
+          <span class="history-input">${escapeHtml(truncate(e.input))}</span>
+          <span class="history-arrow">→</span>
+          <span class="history-output">${escapeHtml(truncate(e.output))}</span>
+        </span>
+        <span class="history-age">${formatAge(e.timestamp)}</span>
+        <button class="action-btn history-copy-btn" data-value="${escapeHtml(e.output)}" aria-label="Copy output">copy</button>
+        <button class="action-btn history-load-btn" data-input="${escapeHtml(e.input)}" data-mode="${e.mode}" aria-label="Load into editor">load</button>
+      </div>`,
+      )
+      .join('');
+
+    historyList.querySelectorAll<HTMLButtonElement>('.history-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(btn.dataset.value ?? '');
+        btn.textContent = 'copied';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+        }, 1200);
+      });
+    });
+
+    historyList.querySelectorAll<HTMLButtonElement>('.history-load-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode as EncodeMode;
+        const input = btn.dataset.input ?? '';
+        setMode(mode);
+        modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+        inputEl.value = input;
+        process();
+        inputEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
+  }
+
+  clearHistoryBtn.addEventListener('click', () => {
+    saveHistory([]);
+    renderHistory([]);
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  renderHistory(loadHistory());
+</script>
+
+<style>
+  .ue-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Shared section label ────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Mode selector ───────────────────────────────────────────────────────── */
+  .mode-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .mode-btns {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .mode-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .mode-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .mode-btn.active {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  /* ── Two-pane layout ─────────────────────────────────────────────────────── */
+  .ue-panes {
+    display: flex;
+    gap: 1.5rem;
+    height: 260px;
+  }
+
+  .ue-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .ue-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .ue-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Shared action button ────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* ── Input textarea ──────────────────────────────────────────────────────── */
+  .ue-textarea {
+    flex: 1;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    overflow: auto;
+  }
+
+  .ue-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  /* ── Output area ─────────────────────────────────────────────────────────── */
+  .ue-output {
+    flex: 1;
+    overflow: auto;
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--fg);
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  .ue-placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .ue-output--error .ue-error {
+    color: #f07070;
+    font-size: 0.8rem;
+  }
+
+  /* ── History ─────────────────────────────────────────────────────────────── */
+  .history-section {
+    border: 1px solid var(--border);
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-list {
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .history-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.history-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.history-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.history-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.history-badge) {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 5.5rem;
+    text-align: center;
+  }
+
+  :global(.history-io) {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  :global(.history-input) {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 30%;
+    flex-shrink: 0;
+  }
+
+  :global(.history-arrow) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    flex-shrink: 0;
+  }
+
+  :global(.history-output) {
+    font-size: 0.75rem;
+    color: var(--fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+
+  :global(.history-age) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  /* ── URL highlight tokens ────────────────────────────────────────────────── */
+  .ue-tool {
+    --url-scheme: #7aabcc;
+    --url-host: #e8e8e8;
+    --url-port: #d4a96a;
+    --url-path: #c8b4f0;
+    --url-param-key: #7ec8a0;
+    --url-param-val: #e8e8e8;
+    --url-fragment: #d4a96a;
+    --url-userinfo: #7aabcc;
+    --url-punct: #444;
+  }
+
+  :global(.url-highlighted) {
+    word-break: break-all;
+    white-space: pre-wrap;
+    line-height: 1.8;
+  }
+
+  :global(.url-scheme) {
+    color: var(--url-scheme);
+  }
+  :global(.url-host) {
+    color: var(--url-host);
+    font-weight: 600;
+  }
+  :global(.url-port) {
+    color: var(--url-port);
+  }
+  :global(.url-path-seg) {
+    color: var(--url-path);
+  }
+  :global(.url-param-key) {
+    color: var(--url-param-key);
+  }
+  :global(.url-param-val) {
+    color: var(--url-param-val);
+  }
+  :global(.url-fragment) {
+    color: var(--url-fragment);
+  }
+  :global(.url-userinfo) {
+    color: var(--url-userinfo);
+  }
+  :global(.url-punct) {
+    color: var(--url-punct);
+  }
+
+  /* ── URL breakdown panel ─────────────────────────────────────────────────── */
+  .ue-breakdown {
+    border: 1px solid var(--border);
+  }
+
+  .breakdown-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .breakdown-body {
+    padding: 0.25rem 0;
+  }
+
+  :global(.bd-row) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.3rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.bd-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.bd-label) {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    width: 5rem;
+    flex-shrink: 0;
+  }
+
+  :global(.bd-value) {
+    font-size: 0.8rem;
+    flex: 1;
+    word-break: break-all;
+  }
+
+  :global(.bd-scheme) {
+    color: var(--url-scheme);
+  }
+  :global(.bd-host) {
+    color: var(--url-host);
+    font-weight: 600;
+  }
+  :global(.bd-port) {
+    color: var(--url-port);
+  }
+  :global(.bd-path) {
+    color: var(--url-path);
+  }
+  :global(.bd-fragment) {
+    color: var(--url-fragment);
+  }
+  :global(.bd-userinfo) {
+    color: var(--url-userinfo);
+  }
+
+  :global(.bd-params-header) {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.bd-param-row) {
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  :global(.bd-param-index) {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    width: 1.5rem;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  :global(.bd-param-key) {
+    font-size: 0.8rem;
+    color: var(--url-param-key);
+    flex-shrink: 0;
+    max-width: 30%;
+    word-break: break-all;
+  }
+
+  :global(.bd-punct) {
+    font-size: 0.8rem;
+    color: var(--url-punct);
+    flex-shrink: 0;
+  }
+
+  :global(.bd-param-val) {
+    font-size: 0.8rem;
+    color: var(--url-param-val);
+    flex: 1;
+    word-break: break-all;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .ue-panes {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .ue-pane {
+      height: 180px;
+    }
+
+    .mode-selector {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

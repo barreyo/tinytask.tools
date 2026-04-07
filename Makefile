@@ -1,4 +1,4 @@
-.PHONY: help dev build preview lint lint-fix format format-check test test-watch test-coverage test-e2e test-e2e-ui check
+.PHONY: help dev build preview lint lint-fix format format-check test tests test-watch test-coverage test-e2e test-e2e-ui check
 
 .DEFAULT_GOAL := help
 
@@ -30,6 +30,8 @@ format-check: ## Check formatting without writing changes
 
 test: ## Run unit tests (Vitest)
 	npm run test
+
+tests: test
 
 test-watch: ## Run unit tests in watch mode
 	npm run test:watch

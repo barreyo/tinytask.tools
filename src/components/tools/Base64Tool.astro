@@ -1,0 +1,464 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="b64-tool">
+  <!-- Mode selector -->
+  <div class="type-selector" role="group" aria-label="Mode">
+    <span class="section-label">mode</span>
+    <div class="type-btns">
+      <button class="type-btn active" data-mode="encode">encode</button>
+      <button class="type-btn" data-mode="decode">decode</button>
+    </div>
+  </div>
+
+  <!-- Input area -->
+  <div class="input-section">
+    <div class="input-header">
+      <span id="input-label" class="section-label">input</span>
+      <button id="clear-input-btn" class="action-btn">clear</button>
+    </div>
+    <textarea
+      id="b64-input"
+      class="b64-textarea"
+      aria-labelledby="input-label"
+      placeholder="Type or paste text to encode…"
+      spellcheck="false"
+      rows="5"></textarea>
+  </div>
+
+  <!-- Convert button -->
+  <div class="controls">
+    <button id="convert-btn" class="action-btn primary">encode</button>
+  </div>
+
+  <!-- Output area -->
+  <div class="output-section">
+    <div class="output-header">
+      <span class="section-label">output</span>
+      <button id="copy-btn" class="action-btn">copy</button>
+    </div>
+    <output id="b64-output" class="b64-output" aria-live="polite" aria-label="Result"></output>
+    <p id="b64-error" class="b64-error" hidden></p>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="section-label">history</span>
+      <button id="clear-history-btn" class="action-btn">clear</button>
+    </div>
+    <div id="history-list" class="history-list" aria-label="Conversion history"></div>
+    <p id="history-empty" class="history-empty">no history yet</p>
+  </div>
+</div>
+
+<script>
+  import { base64Encode, base64Decode } from '../../lib/base64';
+
+  type Mode = 'encode' | 'decode';
+
+  interface HistoryEntry {
+    input: string;
+    output: string;
+    mode: Mode;
+    timestamp: number;
+  }
+
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('b64-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('b64-output') as HTMLOutputElement;
+  const errorEl = document.getElementById('b64-error') as HTMLParagraphElement;
+  const convertBtn = document.getElementById('convert-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const clearInputBtn = document.getElementById('clear-input-btn') as HTMLButtonElement;
+  const historyList = document.getElementById('history-list') as HTMLDivElement;
+  const historyEmpty = document.getElementById('history-empty') as HTMLParagraphElement;
+  const clearHistoryBtn = document.getElementById('clear-history-btn') as HTMLButtonElement;
+  const typeBtns = document.querySelectorAll<HTMLButtonElement>('.type-btn');
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let currentMode: Mode = 'encode';
+  const STORAGE_KEY = 'tt_base64_history';
+  const MAX_HISTORY = 50;
+
+  // ── History helpers ──────────────────────────────────────────────────────────
+  function loadHistory(): HistoryEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistory(entries: HistoryEntry[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function appendHistory(entry: HistoryEntry): void {
+    const existing = loadHistory();
+    const updated = [entry, ...existing].slice(0, MAX_HISTORY);
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  function formatAge(timestamp: number): string {
+    const diff = Date.now() - timestamp;
+    if (diff < 60_000) return 'just now';
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    return `${Math.floor(diff / 86_400_000)}d ago`;
+  }
+
+  function truncate(str: string, max = 60): string {
+    return str.length > max ? str.slice(0, max) + '…' : str;
+  }
+
+  function renderHistory(entries: HistoryEntry[]): void {
+    if (entries.length === 0) {
+      historyList.innerHTML = '';
+      historyEmpty.hidden = false;
+      return;
+    }
+    historyEmpty.hidden = true;
+    historyList.innerHTML = entries
+      .map(
+        (e, i) => `
+      <div class="history-row" data-index="${i}">
+        <span class="history-badge">${e.mode}</span>
+        <span class="history-value">${truncate(e.output)}</span>
+        <span class="history-age">${formatAge(e.timestamp)}</span>
+        <button class="action-btn history-copy-btn" data-value="${e.output.replace(/"/g, '&quot;')}" aria-label="Copy result">copy</button>
+      </div>`,
+      )
+      .join('');
+
+    historyList.querySelectorAll<HTMLButtonElement>('.history-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const val = btn.dataset.value ?? '';
+        await navigator.clipboard.writeText(val);
+        btn.textContent = 'copied';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+        }, 1200);
+      });
+    });
+  }
+
+  // ── Mode selection ───────────────────────────────────────────────────────────
+  function setMode(mode: Mode): void {
+    currentMode = mode;
+    typeBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    convertBtn.textContent = mode;
+    inputEl.placeholder =
+      mode === 'encode' ? 'Type or paste text to encode…' : 'Paste Base64 string to decode…';
+    outputEl.textContent = '';
+    errorEl.hidden = true;
+  }
+
+  typeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode as Mode));
+  });
+
+  // ── Convert ──────────────────────────────────────────────────────────────────
+  function convert(): void {
+    const input = inputEl.value;
+    if (!input.trim()) return;
+
+    errorEl.hidden = true;
+    outputEl.textContent = '';
+
+    try {
+      const result = currentMode === 'encode' ? base64Encode(input) : base64Decode(input);
+      outputEl.textContent = result;
+      appendHistory({ input, output: result, mode: currentMode, timestamp: Date.now() });
+    } catch (err) {
+      errorEl.textContent = err instanceof Error ? err.message : 'An error occurred.';
+      errorEl.hidden = false;
+    }
+  }
+
+  convertBtn.addEventListener('click', convert);
+
+  // Trigger on Ctrl/Cmd + Enter
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      convert();
+    }
+  });
+
+  // ── Copy output ──────────────────────────────────────────────────────────────
+  copyBtn.addEventListener('click', async () => {
+    const text = outputEl.textContent?.trim() ?? '';
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  // ── Clear input ──────────────────────────────────────────────────────────────
+  clearInputBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    outputEl.textContent = '';
+    errorEl.hidden = true;
+    inputEl.focus();
+  });
+
+  // ── Clear history ────────────────────────────────────────────────────────────
+  clearHistoryBtn.addEventListener('click', () => {
+    saveHistory([]);
+    renderHistory([]);
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  renderHistory(loadHistory());
+</script>
+
+<style>
+  .b64-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Shared section label ──────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Type / mode selector ──────────────────────────────────────────────────── */
+  .type-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .type-btns {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .type-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .type-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .type-btn.active {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  /* ── Input section ─────────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .b64-textarea {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .b64-textarea::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .b64-textarea:focus {
+    outline: none;
+  }
+
+  /* ── Controls ──────────────────────────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  /* ── Shared action button ──────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  /* ── Output section ────────────────────────────────────────────────────────── */
+  .output-section {
+    border: 1px solid var(--border);
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .b64-output {
+    display: block;
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-all;
+    min-height: 3rem;
+  }
+
+  .b64-error {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: #e05c5c;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── History ───────────────────────────────────────────────────────────────── */
+  .history-section {
+    border: 1px solid var(--border);
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-list {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .history-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.history-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.history-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.history-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.history-badge) {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 3.5rem;
+    text-align: center;
+  }
+
+  :global(.history-value) {
+    flex: 1;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  :global(.history-age) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  /* ── Mobile ────────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .type-selector {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

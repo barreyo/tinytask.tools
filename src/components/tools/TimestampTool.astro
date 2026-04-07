@@ -1,0 +1,758 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="ts-tool">
+  <!-- ── Live clock ──────────────────────────────────────────────────────── -->
+  <div class="live-section" aria-label="Current Unix timestamp">
+    <div class="live-header">
+      <span class="section-label">now</span>
+      <button id="ts-copy-live-btn" class="action-btn" aria-label="Copy current timestamp"
+        >copy</button
+      >
+    </div>
+    <div class="live-body">
+      <div class="live-ts-row">
+        <span id="ts-live" class="live-ts" aria-live="polite" aria-atomic="true">–</span>
+      </div>
+      <div class="live-meta">
+        <span class="live-meta-label">utc</span>
+        <span id="ts-live-utc" class="live-meta-value">–</span>
+      </div>
+      <div class="live-meta">
+        <span class="live-meta-label">local</span>
+        <span id="ts-live-local" class="live-meta-value">–</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Timestamp → Date ───────────────────────────────────────────────── -->
+  <div class="panel-section">
+    <div class="panel-header">
+      <span class="section-label">timestamp → date</span>
+    </div>
+    <div class="panel-body">
+      <div class="input-row">
+        <input
+          id="ts-input"
+          class="ts-input"
+          type="text"
+          inputmode="numeric"
+          placeholder="Unix timestamp (e.g. 1700000000)"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Unix timestamp"
+        />
+        <button id="ts-convert-btn" class="action-btn primary">convert</button>
+        <button id="ts-now-btn" class="action-btn" title="Use current timestamp">now</button>
+        <button id="ts-clear-btn" class="action-btn">clear</button>
+      </div>
+
+      <p id="ts-error" class="ts-error" hidden></p>
+
+      <div id="ts-result" class="result-panel" hidden>
+        <div class="result-row">
+          <span class="result-label">utc</span>
+          <span id="ts-out-utc" class="result-value"></span>
+          <button class="action-btn copy-result-btn" data-target="ts-out-utc" aria-label="Copy UTC"
+            >copy</button
+          >
+        </div>
+        <div class="result-row">
+          <span class="result-label">local</span>
+          <span id="ts-out-local" class="result-value"></span>
+          <button
+            class="action-btn copy-result-btn"
+            data-target="ts-out-local"
+            aria-label="Copy local">copy</button
+          >
+        </div>
+        <div class="result-row">
+          <span class="result-label">relative</span>
+          <span id="ts-out-relative" class="result-value"></span>
+          <button
+            class="action-btn copy-result-btn"
+            data-target="ts-out-relative"
+            aria-label="Copy relative">copy</button
+          >
+        </div>
+        <div class="result-row">
+          <span class="result-label">iso 8601</span>
+          <span id="ts-out-iso" class="result-value"></span>
+          <button class="action-btn copy-result-btn" data-target="ts-out-iso" aria-label="Copy ISO"
+            >copy</button
+          >
+        </div>
+        <div class="result-row">
+          <span class="result-label">ms</span>
+          <span id="ts-out-ms" class="result-value"></span>
+          <button
+            class="action-btn copy-result-btn"
+            data-target="ts-out-ms"
+            aria-label="Copy milliseconds">copy</button
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Date → Timestamp ───────────────────────────────────────────────── -->
+  <div class="panel-section">
+    <div class="panel-header">
+      <span class="section-label">date → timestamp</span>
+    </div>
+    <div class="panel-body">
+      <div class="date-input-row">
+        <input id="ts-date-input" class="ts-date" type="date" aria-label="Date" />
+        <input id="ts-time-input" class="ts-time" type="time" step="1" aria-label="Time" />
+        <div class="tz-toggle" role="group" aria-label="Timezone">
+          <button class="type-btn active" data-tz="local" id="tz-local-btn">local</button>
+          <button class="type-btn" data-tz="utc" id="tz-utc-btn">utc</button>
+        </div>
+        <button id="ts-date-convert-btn" class="action-btn primary">convert</button>
+      </div>
+
+      <p id="ts-date-error" class="ts-error" hidden></p>
+
+      <div id="ts-date-result" class="result-panel" hidden>
+        <div class="result-row">
+          <span class="result-label">unix (s)</span>
+          <span id="ts-date-out-s" class="result-value ts-large-out"></span>
+          <button
+            class="action-btn copy-result-btn"
+            data-target="ts-date-out-s"
+            aria-label="Copy seconds">copy</button
+          >
+        </div>
+        <div class="result-row">
+          <span class="result-label">unix (ms)</span>
+          <span id="ts-date-out-ms" class="result-value"></span>
+          <button
+            class="action-btn copy-result-btn"
+            data-target="ts-date-out-ms"
+            aria-label="Copy milliseconds">copy</button
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History ────────────────────────────────────────────────────────── -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="section-label">history</span>
+      <button id="ts-clear-history-btn" class="action-btn">clear</button>
+    </div>
+    <div id="ts-history-list" class="history-list" aria-label="Conversion history"></div>
+    <p id="ts-history-empty" class="history-empty">no history yet</p>
+  </div>
+</div>
+
+<script>
+  import {
+    validateTimestamp,
+    timestampToDate,
+    dateToTimestamp,
+    formatUTC,
+    formatLocal,
+    formatISO,
+    formatRelative,
+    formatAge,
+    truncate,
+    loadHistory,
+    saveHistory,
+    prependHistory,
+    HISTORY_MAX,
+  } from '../../lib/timestamp';
+
+  import type { HistoryEntry, ConversionDirection } from '../../lib/timestamp';
+
+  // ── Element refs ────────────────────────────────────────────────────────────
+  const liveEl = document.getElementById('ts-live') as HTMLSpanElement;
+  const liveUtcEl = document.getElementById('ts-live-utc') as HTMLSpanElement;
+  const liveLocalEl = document.getElementById('ts-live-local') as HTMLSpanElement;
+  const copyLiveBtn = document.getElementById('ts-copy-live-btn') as HTMLButtonElement;
+
+  const tsInput = document.getElementById('ts-input') as HTMLInputElement;
+  const tsConvertBtn = document.getElementById('ts-convert-btn') as HTMLButtonElement;
+  const tsNowBtn = document.getElementById('ts-now-btn') as HTMLButtonElement;
+  const tsClearBtn = document.getElementById('ts-clear-btn') as HTMLButtonElement;
+  const tsError = document.getElementById('ts-error') as HTMLParagraphElement;
+  const tsResult = document.getElementById('ts-result') as HTMLDivElement;
+  const tsOutUtc = document.getElementById('ts-out-utc') as HTMLSpanElement;
+  const tsOutLocal = document.getElementById('ts-out-local') as HTMLSpanElement;
+  const tsOutRelative = document.getElementById('ts-out-relative') as HTMLSpanElement;
+  const tsOutIso = document.getElementById('ts-out-iso') as HTMLSpanElement;
+  const tsOutMs = document.getElementById('ts-out-ms') as HTMLSpanElement;
+
+  const tsDateInput = document.getElementById('ts-date-input') as HTMLInputElement;
+  const tsTimeInput = document.getElementById('ts-time-input') as HTMLInputElement;
+  const tzLocalBtn = document.getElementById('tz-local-btn') as HTMLButtonElement;
+  const tzUtcBtn = document.getElementById('tz-utc-btn') as HTMLButtonElement;
+  const tsDateConvertBtn = document.getElementById('ts-date-convert-btn') as HTMLButtonElement;
+  const tsDateError = document.getElementById('ts-date-error') as HTMLParagraphElement;
+  const tsDateResult = document.getElementById('ts-date-result') as HTMLDivElement;
+  const tsDateOutS = document.getElementById('ts-date-out-s') as HTMLSpanElement;
+  const tsDateOutMs = document.getElementById('ts-date-out-ms') as HTMLSpanElement;
+
+  const historyList = document.getElementById('ts-history-list') as HTMLDivElement;
+  const historyEmpty = document.getElementById('ts-history-empty') as HTMLParagraphElement;
+  const clearHistoryBtn = document.getElementById('ts-clear-history-btn') as HTMLButtonElement;
+
+  // ── State ───────────────────────────────────────────────────────────────────
+  let tzMode: 'local' | 'utc' = 'local';
+  let lastConvertedSeconds: number | null = null;
+  let relativeInterval: ReturnType<typeof setInterval> | null = null;
+
+  // ── Live clock ──────────────────────────────────────────────────────────────
+  function tickLiveClock(): void {
+    const now = new Date();
+    const seconds = Math.floor(now.getTime() / 1000);
+    liveEl.textContent = String(seconds);
+    liveUtcEl.textContent = formatUTC(now);
+    liveLocalEl.textContent = formatLocal(now);
+  }
+
+  tickLiveClock();
+  setInterval(tickLiveClock, 1000);
+
+  copyLiveBtn.addEventListener('click', async () => {
+    const text = liveEl.textContent ?? '';
+    await navigator.clipboard.writeText(text);
+    copyLiveBtn.textContent = 'copied';
+    setTimeout(() => (copyLiveBtn.textContent = 'copy'), 1200);
+  });
+
+  // ── Timestamp → Date ────────────────────────────────────────────────────────
+  function convertTimestamp(): void {
+    const raw = tsInput.value.trim();
+    tsError.hidden = true;
+    tsResult.hidden = true;
+
+    const { seconds, error } = validateTimestamp(raw);
+    if (error) {
+      tsError.textContent = error;
+      tsError.hidden = false;
+      return;
+    }
+
+    const date = timestampToDate(seconds);
+    tsOutUtc.textContent = formatUTC(date);
+    tsOutLocal.textContent = formatLocal(date);
+    tsOutRelative.textContent = formatRelative(date);
+    tsOutIso.textContent = formatISO(date);
+    tsOutMs.textContent = String(seconds * 1000);
+    tsResult.hidden = false;
+
+    lastConvertedSeconds = seconds;
+
+    // Keep relative time updating
+    if (relativeInterval) clearInterval(relativeInterval);
+    relativeInterval = setInterval(() => {
+      if (lastConvertedSeconds !== null) {
+        tsOutRelative.textContent = formatRelative(timestampToDate(lastConvertedSeconds));
+      }
+    }, 10_000);
+
+    // Add to history
+    const entry: HistoryEntry = {
+      direction: 'to-date' as ConversionDirection,
+      input: raw,
+      output: formatISO(date),
+      timestamp: Date.now(),
+    };
+    const existing = loadHistory();
+    const updated = prependHistory(entry, existing);
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  tsConvertBtn.addEventListener('click', convertTimestamp);
+  tsInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      convertTimestamp();
+    }
+  });
+
+  tsNowBtn.addEventListener('click', () => {
+    tsInput.value = String(Math.floor(Date.now() / 1000));
+    convertTimestamp();
+  });
+
+  tsClearBtn.addEventListener('click', () => {
+    tsInput.value = '';
+    tsError.hidden = true;
+    tsResult.hidden = true;
+    lastConvertedSeconds = null;
+    if (relativeInterval) clearInterval(relativeInterval);
+  });
+
+  // ── Date → Timestamp ────────────────────────────────────────────────────────
+  function setTzMode(mode: 'local' | 'utc'): void {
+    tzMode = mode;
+    tzLocalBtn.classList.toggle('active', mode === 'local');
+    tzUtcBtn.classList.toggle('active', mode === 'utc');
+  }
+
+  tzLocalBtn.addEventListener('click', () => setTzMode('local'));
+  tzUtcBtn.addEventListener('click', () => setTzMode('utc'));
+
+  // Set default date/time to now
+  function initDateInputs(): void {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    tsDateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    tsTimeInput.value = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+  initDateInputs();
+
+  function convertDateToTimestamp(): void {
+    const dateVal = tsDateInput.value;
+    const timeVal = tsTimeInput.value || '00:00:00';
+
+    tsDateError.hidden = true;
+    tsDateResult.hidden = true;
+
+    if (!dateVal) {
+      tsDateError.textContent = 'Please enter a date.';
+      tsDateError.hidden = false;
+      return;
+    }
+
+    const isoStr = tzMode === 'utc' ? `${dateVal}T${timeVal}Z` : `${dateVal}T${timeVal}`;
+
+    const date = new Date(isoStr);
+
+    if (isNaN(date.getTime())) {
+      tsDateError.textContent = 'Invalid date/time.';
+      tsDateError.hidden = false;
+      return;
+    }
+
+    const seconds = dateToTimestamp(date);
+    tsDateOutS.textContent = String(seconds);
+    tsDateOutMs.textContent = String(seconds * 1000);
+    tsDateResult.hidden = false;
+
+    const entry: HistoryEntry = {
+      direction: 'to-ts' as ConversionDirection,
+      input: `${dateVal} ${timeVal} (${tzMode.toUpperCase()})`,
+      output: String(seconds),
+      timestamp: Date.now(),
+    };
+    const existing = loadHistory();
+    const updated = prependHistory(entry, existing);
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  tsDateConvertBtn.addEventListener('click', convertDateToTimestamp);
+  tsDateInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') convertDateToTimestamp();
+  });
+  tsTimeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') convertDateToTimestamp();
+  });
+
+  // ── Copy result buttons ──────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLButtonElement>('.copy-result-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.target ?? '';
+      const targetEl = document.getElementById(targetId);
+      const text = targetEl?.textContent?.trim() ?? '';
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'copied';
+      setTimeout(() => (btn.textContent = 'copy'), 1200);
+    });
+  });
+
+  // ── History ─────────────────────────────────────────────────────────────────
+  function renderHistory(entries: HistoryEntry[]): void {
+    if (entries.length === 0) {
+      historyList.innerHTML = '';
+      historyEmpty.hidden = false;
+      return;
+    }
+    historyEmpty.hidden = true;
+    historyList.innerHTML = entries
+      .map(
+        (e, i) => `
+        <div class="history-row" data-index="${i}">
+          <span class="history-badge">${e.direction === 'to-date' ? 'to date' : 'to ts'}</span>
+          <span class="history-value">${truncate(e.output)}</span>
+          <span class="history-age">${formatAge(e.timestamp)}</span>
+          <button class="action-btn history-copy-btn" data-value="${e.output.replace(/"/g, '&quot;')}" aria-label="Copy result">copy</button>
+        </div>`,
+      )
+      .join('');
+
+    historyList.querySelectorAll<HTMLButtonElement>('.history-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const val = btn.dataset.value ?? '';
+        await navigator.clipboard.writeText(val);
+        btn.textContent = 'copied';
+        setTimeout(() => (btn.textContent = 'copy'), 1200);
+      });
+    });
+  }
+
+  clearHistoryBtn.addEventListener('click', () => {
+    saveHistory([]);
+    renderHistory([]);
+  });
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+  renderHistory(loadHistory());
+</script>
+
+<style>
+  .ts-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Shared ──────────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  /* ── Live clock ──────────────────────────────────────────────────────────── */
+  .live-section {
+    border: 1px solid var(--border);
+  }
+
+  .live-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .live-body {
+    padding: 1rem 0.75rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .live-ts-row {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  .live-ts {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .live-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  .live-meta-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    min-width: 2.5rem;
+    flex-shrink: 0;
+  }
+
+  .live-meta-value {
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Panels ──────────────────────────────────────────────────────────────── */
+  .panel-section {
+    border: 1px solid var(--border);
+  }
+
+  .panel-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-body {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* ── Timestamp input row ─────────────────────────────────────────────────── */
+  .input-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .ts-input {
+    flex: 1;
+    min-width: 180px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    padding: 0.4rem 0.65rem;
+    transition: border-color 0.1s;
+  }
+
+  .ts-input::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .ts-input:focus {
+    outline: none;
+    border-color: var(--border-active);
+  }
+
+  /* ── Date input row ──────────────────────────────────────────────────────── */
+  .date-input-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .ts-date,
+  .ts-time {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    padding: 0.4rem 0.65rem;
+    transition: border-color 0.1s;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+
+  .ts-date:focus,
+  .ts-time:focus {
+    outline: none;
+    border-color: var(--border-active);
+  }
+
+  .tz-toggle {
+    display: flex;
+    gap: 0;
+  }
+
+  .type-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .type-btn + .type-btn {
+    margin-left: -1px;
+  }
+
+  .type-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+    position: relative;
+  }
+
+  .type-btn.active {
+    border-color: var(--border-active);
+    color: var(--fg);
+    position: relative;
+  }
+
+  /* ── Error ───────────────────────────────────────────────────────────────── */
+  .ts-error {
+    margin: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: #e05c5c;
+  }
+
+  /* ── Result panel ────────────────────────────────────────────────────────── */
+  .result-panel {
+    border: 1px solid var(--border);
+  }
+
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-row:last-child {
+    border-bottom: none;
+  }
+
+  .result-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    min-width: 4.5rem;
+    flex-shrink: 0;
+  }
+
+  .result-value {
+    flex: 1;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  .ts-large-out {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── History ─────────────────────────────────────────────────────────────── */
+  .history-section {
+    border: 1px solid var(--border);
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-list {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .history-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.history-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.history-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.history-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.history-badge) {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 3.5rem;
+    text-align: center;
+  }
+
+  :global(.history-value) {
+    flex: 1;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  :global(.history-age) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .live-ts {
+      font-size: 1.5rem;
+    }
+
+    .input-row,
+    .date-input-row {
+      flex-direction: column;
+    }
+
+    .ts-input,
+    .ts-date,
+    .ts-time {
+      width: 100%;
+    }
+  }
+</style>

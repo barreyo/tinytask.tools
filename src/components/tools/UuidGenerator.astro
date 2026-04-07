@@ -1,14 +1,63 @@
 ---
-// No server-side imports needed — this tool is fully client-side
+// No server-side imports needed — fully client-side
 ---
 
 <div class="uuid-tool">
-  <div class="output-row">
-    <output id="uuid-output" class="uuid-output" aria-live="polite" aria-label="Generated UUID"
-    ></output>
-    <button id="copy-btn" class="action-btn" aria-label="Copy UUID to clipboard">copy</button>
+  <!-- Type selector -->
+  <div class="type-selector" role="group" aria-label="UUID type">
+    <span class="section-label">type</span>
+    <div class="type-btns">
+      <button class="type-btn active" data-type="v4">v4</button>
+      <button class="type-btn" data-type="v1">v1</button>
+      <button class="type-btn" data-type="v7">v7</button>
+      <button class="type-btn" data-type="v5">v5</button>
+      <button class="type-btn" data-type="v3">v3</button>
+      <button class="type-btn" data-type="ulid">ulid</button>
+    </div>
   </div>
 
+  <!-- Namespace inputs (v3 / v5 only) -->
+  <div id="ns-inputs" class="ns-inputs" hidden>
+    <label class="ns-field">
+      <span class="label-text">namespace</span>
+      <select id="ns-select" class="ns-select">
+        <option value="6ba7b810-9dad-11d1-80b4-00c04fd430c8">dns</option>
+        <option value="6ba7b811-9dad-11d1-80b4-00c04fd430c8">url</option>
+        <option value="6ba7b812-9dad-11d1-80b4-00c04fd430c8">oid</option>
+        <option value="6ba7b814-9dad-11d1-80b4-00c04fd430c8">x500</option>
+        <option value="custom">custom…</option>
+      </select>
+    </label>
+    <label id="custom-ns-wrap" class="ns-field" hidden>
+      <span class="label-text">custom ns</span>
+      <input
+        id="custom-ns-input"
+        class="ns-text-input"
+        type="text"
+        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        spellcheck="false"
+      />
+    </label>
+    <label class="ns-field">
+      <span class="label-text">name</span>
+      <input
+        id="ns-name"
+        class="ns-text-input ns-text-input--wide"
+        type="text"
+        placeholder="example.com"
+        spellcheck="false"
+      />
+    </label>
+  </div>
+
+  <!-- Output row -->
+  <div class="output-row">
+    <output id="uuid-output" class="uuid-output" aria-live="polite" aria-label="Generated value"
+    ></output>
+    <button id="copy-btn" class="action-btn" aria-label="Copy to clipboard">copy</button>
+  </div>
+
+  <!-- Controls -->
   <div class="controls">
     <button id="generate-btn" class="action-btn primary">generate</button>
     <label class="count-label">
@@ -17,49 +66,248 @@
     </label>
   </div>
 
-  <div id="batch-output" class="batch-output" aria-live="polite"></div>
+  <!-- Batch output -->
+  <div id="batch-wrap" class="batch-wrap" hidden>
+    <div class="batch-header">
+      <span class="section-label">batch output</span>
+      <button id="copy-all-btn" class="action-btn">copy all</button>
+      <button id="download-all-btn" class="action-btn" aria-label="Download batch as text file"
+        >download</button
+      >
+    </div>
+    <div id="batch-output" class="batch-output" aria-live="polite"></div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="section-label">history</span>
+      <button id="clear-history-btn" class="action-btn">clear</button>
+    </div>
+    <div id="history-list" class="history-list" aria-label="Generation history"></div>
+    <p id="history-empty" class="history-empty">no history yet</p>
+  </div>
 </div>
 
 <script>
-  function uuidv4(): string {
-    return crypto.randomUUID();
-  }
+  import { v1, v3, v5, v7 } from 'uuid';
+  import {
+    generateULID,
+    formatAge,
+    mergeHistory,
+    pruneHistory,
+    type UuidType,
+    type HistoryEntry,
+  } from '../../lib/uuid-generator';
 
+  // ── Element refs ──────────────────────────────────────────────────────────────
   const outputEl = document.getElementById('uuid-output') as HTMLOutputElement;
-  const batchEl = document.getElementById('batch-output') as HTMLDivElement;
-  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
   const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
   const countInput = document.getElementById('batch-count') as HTMLInputElement;
+  const batchWrap = document.getElementById('batch-wrap') as HTMLDivElement;
+  const batchOutput = document.getElementById('batch-output') as HTMLDivElement;
+  const copyAllBtn = document.getElementById('copy-all-btn') as HTMLButtonElement;
+  const downloadAllBtn = document.getElementById('download-all-btn') as HTMLButtonElement;
+  const nsInputs = document.getElementById('ns-inputs') as HTMLDivElement;
+  const nsSelect = document.getElementById('ns-select') as HTMLSelectElement;
+  const customNsWrap = document.getElementById('custom-ns-wrap') as HTMLLabelElement;
+  const customNsInput = document.getElementById('custom-ns-input') as HTMLInputElement;
+  const nsName = document.getElementById('ns-name') as HTMLInputElement;
+  const historyList = document.getElementById('history-list') as HTMLDivElement;
+  const historyEmpty = document.getElementById('history-empty') as HTMLParagraphElement;
+  const clearHistoryBtn = document.getElementById('clear-history-btn') as HTMLButtonElement;
+  const typeBtns = document.querySelectorAll<HTMLButtonElement>('.type-btn');
 
-  function generate() {
-    const count = Math.min(Math.max(parseInt(countInput.value, 10) || 1, 1), 100);
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let currentType: UuidType = 'v4';
+  const STORAGE_KEY = 'tt_uuid_history';
 
-    if (count === 1) {
-      const id = uuidv4();
-      outputEl.textContent = id;
-      batchEl.textContent = '';
-    } else {
-      const ids = Array.from({ length: count }, uuidv4);
-      outputEl.textContent = '';
-      batchEl.textContent = ids.join('\n');
+  // ── History helpers ───────────────────────────────────────────────────────────
+  function loadHistory(): HistoryEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
     }
   }
 
-  async function copyOutput() {
-    const text =
-      batchEl.textContent?.trim() || outputEl.textContent?.trim() || '';
+  function saveHistory(entries: HistoryEntry[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pruneHistory(entries)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function appendHistory(newEntries: HistoryEntry[]): void {
+    const updated = mergeHistory(newEntries, loadHistory());
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  function renderHistory(entries: HistoryEntry[]): void {
+    if (entries.length === 0) {
+      historyList.innerHTML = '';
+      historyEmpty.hidden = false;
+      return;
+    }
+    historyEmpty.hidden = true;
+    historyList.innerHTML = entries
+      .map(
+        (e, i) => `
+      <div class="history-row" data-index="${i}">
+        <span class="history-badge">${e.type}</span>
+        <span class="history-value">${e.value}</span>
+        <span class="history-age">${formatAge(e.timestamp)}</span>
+        <button class="action-btn history-copy-btn" data-value="${e.value}" aria-label="Copy ${e.value}">copy</button>
+      </div>`,
+      )
+      .join('');
+
+    // Attach copy listeners
+    historyList.querySelectorAll<HTMLButtonElement>('.history-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const val = btn.dataset.value ?? '';
+        await navigator.clipboard.writeText(val);
+        btn.textContent = 'copied';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+        }, 1200);
+      });
+    });
+  }
+
+  // ── Type selection ────────────────────────────────────────────────────────────
+  function setType(type: UuidType): void {
+    currentType = type;
+    typeBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.type === type);
+    });
+    nsInputs.hidden = type !== 'v3' && type !== 'v5';
+  }
+
+  typeBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setType(btn.dataset.type as UuidType);
+      generate();
+    });
+  });
+
+  // ── Namespace select ──────────────────────────────────────────────────────────
+  nsSelect.addEventListener('change', () => {
+    customNsWrap.hidden = nsSelect.value !== 'custom';
+  });
+
+  // ── Generation ────────────────────────────────────────────────────────────────
+  function resolveNamespace(): string {
+    return nsSelect.value === 'custom' ? customNsInput.value.trim() : nsSelect.value;
+  }
+
+  function generateOne(): string {
+    const name = nsName.value.trim() || 'example';
+    switch (currentType) {
+      case 'v1':
+        return v1();
+      case 'v3':
+        return v3(name, resolveNamespace() || v3.DNS);
+      case 'v4':
+        return crypto.randomUUID();
+      case 'v5':
+        return v5(name, resolveNamespace() || v5.DNS);
+      case 'v7':
+        return v7();
+      case 'ulid':
+        return generateULID();
+    }
+  }
+
+  function generate(): void {
+    const count = Math.min(Math.max(parseInt(countInput.value, 10) || 1, 1), 100);
+    const now = Date.now();
+
+    if (count === 1) {
+      const id = generateOne();
+      outputEl.textContent = id;
+      batchWrap.hidden = true;
+      batchOutput.innerHTML = '';
+      appendHistory([{ value: id, type: currentType, timestamp: now }]);
+    } else {
+      const ids = Array.from({ length: count }, generateOne);
+      outputEl.textContent = '';
+      batchOutput.innerHTML = ids
+        .map(
+          (id) =>
+            `<div class="batch-row"><span class="batch-value">${id}</span><button class="action-btn batch-copy-btn" data-value="${id}" aria-label="Copy ${id}">copy</button></div>`,
+        )
+        .join('');
+      batchWrap.hidden = false;
+
+      // Attach per-row copy listeners
+      batchOutput.querySelectorAll<HTMLButtonElement>('.batch-copy-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const val = btn.dataset.value ?? '';
+          await navigator.clipboard.writeText(val);
+          btn.textContent = 'copied';
+          setTimeout(() => {
+            btn.textContent = 'copy';
+          }, 1200);
+        });
+      });
+
+      appendHistory(ids.map((value) => ({ value, type: currentType, timestamp: now })));
+    }
+  }
+
+  // ── Copy single output ────────────────────────────────────────────────────────
+  copyBtn.addEventListener('click', async () => {
+    const text = outputEl.textContent?.trim() ?? '';
     if (!text) return;
     await navigator.clipboard.writeText(text);
     copyBtn.textContent = 'copied';
     setTimeout(() => {
       copyBtn.textContent = 'copy';
     }, 1200);
-  }
+  });
 
+  // ── Copy all (batch) ──────────────────────────────────────────────────────────
+  copyAllBtn.addEventListener('click', async () => {
+    const values = [...batchOutput.querySelectorAll<HTMLElement>('.batch-value')].map(
+      (el) => el.textContent ?? '',
+    );
+    await navigator.clipboard.writeText(values.join('\n'));
+    copyAllBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyAllBtn.textContent = 'copy all';
+    }, 1200);
+  });
+
+  downloadAllBtn.addEventListener('click', () => {
+    const values = [...batchOutput.querySelectorAll<HTMLElement>('.batch-value')].map(
+      (el) => el.textContent ?? '',
+    );
+    if (!values.length) return;
+    const blob = new Blob([values.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentType}-batch-${values.length}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Generate button ───────────────────────────────────────────────────────────
   generateBtn.addEventListener('click', generate);
-  copyBtn.addEventListener('click', copyOutput);
 
-  // Generate one on load
+  // ── Clear history ─────────────────────────────────────────────────────────────
+  clearHistoryBtn.addEventListener('click', () => {
+    saveHistory([]);
+    renderHistory([]);
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  renderHistory(loadHistory());
   generate();
 </script>
 
@@ -70,6 +318,98 @@
     gap: 1.5rem;
   }
 
+  /* ── Shared section label ────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Type selector ───────────────────────────────────────────────────────── */
+  .type-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .type-btns {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .type-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .type-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .type-btn.active {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  /* ── Namespace inputs ────────────────────────────────────────────────────── */
+  .ns-inputs {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+  }
+
+  .ns-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .ns-select,
+  .ns-text-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.5rem;
+    letter-spacing: 0.02em;
+  }
+
+  .ns-select {
+    cursor: pointer;
+  }
+
+  .ns-text-input--wide {
+    width: 16rem;
+  }
+
+  .ns-select:focus,
+  .ns-text-input:focus {
+    outline: 1px solid var(--fg);
+    outline-offset: 2px;
+  }
+
+  /* ── Output row ──────────────────────────────────────────────────────────── */
   .output-row {
     display: flex;
     align-items: center;
@@ -87,12 +427,14 @@
     min-height: 1.2em;
   }
 
+  /* ── Controls ────────────────────────────────────────────────────────────── */
   .controls {
     display: flex;
     align-items: center;
     gap: 1rem;
   }
 
+  /* ── Shared action button ────────────────────────────────────────────────── */
   .action-btn {
     background: none;
     border: 1px solid var(--border);
@@ -103,7 +445,11 @@
     text-transform: uppercase;
     padding: 0.4rem 0.75rem;
     cursor: pointer;
-    transition: border-color 0.1s, color 0.1s;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .action-btn:hover {
@@ -120,6 +466,7 @@
     border-color: var(--border-active);
   }
 
+  /* ── Count input ─────────────────────────────────────────────────────────── */
   .count-label {
     display: flex;
     align-items: center;
@@ -146,18 +493,128 @@
     outline-offset: 2px;
   }
 
-  .batch-output {
-    font-size: 0.8rem;
-    line-height: 1.8;
-    color: var(--fg);
-    white-space: pre;
-    letter-spacing: 0.04em;
+  /* ── Batch output ────────────────────────────────────────────────────────── */
+  .batch-wrap {
     border: 1px solid var(--border);
-    padding: 0.75rem 1rem;
-    display: none;
   }
 
-  .batch-output:not(:empty) {
-    display: block;
+  .batch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .batch-output {
+    padding: 0.5rem 0;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  :global(.batch-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.3rem 0.75rem;
+  }
+
+  :global(.batch-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.batch-value) {
+    flex: 1;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    word-break: break-all;
+  }
+
+  /* ── History ─────────────────────────────────────────────────────────────── */
+  .history-section {
+    border: 1px solid var(--border);
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-list {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .history-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.history-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.history-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.history-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.history-badge) {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 2.8rem;
+    text-align: center;
+  }
+
+  :global(.history-value) {
+    flex: 1;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  :global(.history-age) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .type-selector {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .ns-inputs {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .ns-text-input--wide {
+      width: 100%;
+    }
   }
 </style>

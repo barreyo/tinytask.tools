@@ -11,8 +11,8 @@ export const tools: Tool[] = [
   {
     slug: 'uuid-generator',
     name: 'UUID Generator',
-    description: 'Generate RFC 4122 v4 UUIDs instantly.',
-    tags: ['generate', 'ids'],
+    description: 'Generate UUIDs (v1, v3, v4, v5, v7) and ULIDs with history.',
+    tags: ['generate', 'ids', 'ulid'],
     implemented: true,
   },
   {
@@ -20,6 +20,7 @@ export const tools: Tool[] = [
     name: 'Base64 Encoder / Decoder',
     description: 'Encode and decode Base64 strings.',
     tags: ['encode', 'decode'],
+    implemented: true,
   },
   {
     slug: 'json-formatter',
@@ -33,17 +34,27 @@ export const tools: Tool[] = [
     name: 'URL Encoder / Decoder',
     description: 'Percent-encode and decode URL components.',
     tags: ['url', 'encode', 'decode'],
+    implemented: true,
+  },
+  {
+    slug: 'crontab',
+    name: 'Crontab Calculator',
+    description: 'Parse cron expressions into human-readable schedules and see upcoming triggers.',
+    tags: ['cron', 'schedule', 'time'],
+    implemented: true,
   },
   {
     slug: 'hash-generator',
     name: 'Hash Generator',
-    description: 'Compute MD5, SHA-1, SHA-256, and SHA-512 hashes.',
+    description: 'Compute MD5, SHA-1, SHA-256, SHA-384, and SHA-512 hashes.',
     tags: ['hash', 'crypto'],
+    implemented: true,
   },
   {
     slug: 'timestamp',
     name: 'Unix Timestamp',
     description: 'Convert between Unix timestamps and human-readable dates.',
     tags: ['time', 'convert'],
+    implemented: true,
   },
 ];

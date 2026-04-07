@@ -1,0 +1,483 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="hash-tool">
+  <!-- Input area -->
+  <div class="input-section">
+    <div class="input-header">
+      <span id="input-label" class="section-label">input</span>
+      <button id="clear-input-btn" class="action-btn">clear</button>
+    </div>
+    <textarea
+      id="hash-input"
+      class="hash-textarea"
+      aria-labelledby="input-label"
+      placeholder="Type or paste text to hash…"
+      spellcheck="false"
+      rows="4"></textarea>
+  </div>
+
+  <!-- Generate button -->
+  <div class="controls">
+    <button id="generate-btn" class="action-btn primary">generate</button>
+  </div>
+
+  <!-- Output area -->
+  <div class="output-section">
+    <div class="output-header">
+      <span class="section-label">output</span>
+      <button id="copy-all-btn" class="action-btn">copy all</button>
+    </div>
+    <div id="hash-results" class="hash-results" aria-live="polite" aria-label="Hash results">
+      <div class="hash-row" data-algo="MD5">
+        <span class="hash-algo">MD5</span>
+        <span class="hash-value" id="result-MD5">—</span>
+        <button class="action-btn hash-copy-btn" data-algo="MD5" disabled aria-label="Copy MD5"
+          >copy</button
+        >
+      </div>
+      <div class="hash-row" data-algo="SHA-1">
+        <span class="hash-algo">SHA-1</span>
+        <span class="hash-value" id="result-SHA-1">—</span>
+        <button class="action-btn hash-copy-btn" data-algo="SHA-1" disabled aria-label="Copy SHA-1"
+          >copy</button
+        >
+      </div>
+      <div class="hash-row" data-algo="SHA-256">
+        <span class="hash-algo">SHA-256</span>
+        <span class="hash-value" id="result-SHA-256">—</span>
+        <button
+          class="action-btn hash-copy-btn"
+          data-algo="SHA-256"
+          disabled
+          aria-label="Copy SHA-256">copy</button
+        >
+      </div>
+      <div class="hash-row" data-algo="SHA-384">
+        <span class="hash-algo">SHA-384</span>
+        <span class="hash-value" id="result-SHA-384">—</span>
+        <button
+          class="action-btn hash-copy-btn"
+          data-algo="SHA-384"
+          disabled
+          aria-label="Copy SHA-384">copy</button
+        >
+      </div>
+      <div class="hash-row" data-algo="SHA-512">
+        <span class="hash-algo">SHA-512</span>
+        <span class="hash-value" id="result-SHA-512">—</span>
+        <button
+          class="action-btn hash-copy-btn"
+          data-algo="SHA-512"
+          disabled
+          aria-label="Copy SHA-512">copy</button
+        >
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="section-label">history</span>
+      <button id="clear-history-btn" class="action-btn">clear</button>
+    </div>
+    <div id="history-list" class="history-list" aria-label="Hash history"></div>
+    <p id="history-empty" class="history-empty">no history yet</p>
+  </div>
+</div>
+
+<script>
+  import { computeAllHashes, formatAge, truncate } from '../../lib/hash';
+  import type { HashResults, HistoryEntry } from '../../lib/hash';
+
+  // ── Element refs ──────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('hash-input') as HTMLTextAreaElement;
+  const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
+  const clearInputBtn = document.getElementById('clear-input-btn') as HTMLButtonElement;
+  const copyAllBtn = document.getElementById('copy-all-btn') as HTMLButtonElement;
+  const historyList = document.getElementById('history-list') as HTMLDivElement;
+  const historyEmpty = document.getElementById('history-empty') as HTMLParagraphElement;
+  const clearHistoryBtn = document.getElementById('clear-history-btn') as HTMLButtonElement;
+
+  const STORAGE_KEY = 'tt_hash_history';
+  const MAX_HISTORY = 30;
+
+  let currentResults: HashResults | null = null;
+
+  // ── Result row refs ───────────────────────────────────────────────────────────
+  const algos = ['MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'] as const;
+
+  function getValueEl(algo: string): HTMLSpanElement {
+    return document.getElementById(`result-${algo}`) as HTMLSpanElement;
+  }
+
+  // ── History helpers ───────────────────────────────────────────────────────────
+  function loadHistory(): HistoryEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistory(entries: HistoryEntry[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function appendHistory(entry: HistoryEntry): void {
+    const existing = loadHistory();
+    const updated = [entry, ...existing].slice(0, MAX_HISTORY);
+    saveHistory(updated);
+    renderHistory(updated);
+  }
+
+  function renderHistory(entries: HistoryEntry[]): void {
+    if (entries.length === 0) {
+      historyList.innerHTML = '';
+      historyEmpty.hidden = false;
+      return;
+    }
+    historyEmpty.hidden = true;
+    historyList.innerHTML = entries
+      .map(
+        (e, i) => `
+      <div class="history-row" data-index="${i}">
+        <span class="history-badge">${truncate(e.input, 20)}</span>
+        <span class="history-value">${truncate(e.hashes['SHA-256'], 44)}</span>
+        <span class="history-age">${formatAge(e.timestamp)}</span>
+        <button class="action-btn history-copy-btn" data-sha256="${e.hashes['SHA-256'].replace(/"/g, '&quot;')}" aria-label="Copy SHA-256">copy</button>
+      </div>`,
+      )
+      .join('');
+
+    historyList.querySelectorAll<HTMLButtonElement>('.history-copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const val = btn.dataset.sha256 ?? '';
+        await navigator.clipboard.writeText(val);
+        btn.textContent = 'copied';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+        }, 1200);
+      });
+    });
+  }
+
+  // ── Display results ───────────────────────────────────────────────────────────
+  function displayResults(results: HashResults): void {
+    for (const algo of algos) {
+      const valueEl = getValueEl(algo);
+      valueEl.textContent = results[algo];
+    }
+    document.querySelectorAll<HTMLButtonElement>('.hash-copy-btn').forEach((btn) => {
+      btn.disabled = false;
+    });
+    currentResults = results;
+  }
+
+  function clearResults(): void {
+    for (const algo of algos) {
+      const valueEl = getValueEl(algo);
+      valueEl.textContent = '—';
+    }
+    document.querySelectorAll<HTMLButtonElement>('.hash-copy-btn').forEach((btn) => {
+      btn.disabled = true;
+    });
+    currentResults = null;
+  }
+
+  // ── Generate ──────────────────────────────────────────────────────────────────
+  async function generate(): Promise<void> {
+    const input = inputEl.value;
+    if (!input.trim()) return;
+
+    generateBtn.textContent = 'generating…';
+    generateBtn.disabled = true;
+
+    try {
+      const results = await computeAllHashes(input);
+      displayResults(results);
+      appendHistory({ input, hashes: results, timestamp: Date.now() });
+    } finally {
+      generateBtn.textContent = 'generate';
+      generateBtn.disabled = false;
+    }
+  }
+
+  generateBtn.addEventListener('click', generate);
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      generate();
+    }
+  });
+
+  // ── Copy individual hash ──────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLButtonElement>('.hash-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const algo = btn.dataset.algo as string;
+      const valueEl = getValueEl(algo);
+      const text = valueEl.textContent?.trim() ?? '';
+      if (!text || text === '—') return;
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'copied';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+      }, 1200);
+    });
+  });
+
+  // ── Copy all ──────────────────────────────────────────────────────────────────
+  copyAllBtn.addEventListener('click', async () => {
+    if (!currentResults) return;
+    const text = algos.map((algo) => `${algo}: ${currentResults![algo]}`).join('\n');
+    await navigator.clipboard.writeText(text);
+    copyAllBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyAllBtn.textContent = 'copy all';
+    }, 1200);
+  });
+
+  // ── Clear input ───────────────────────────────────────────────────────────────
+  clearInputBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    clearResults();
+    inputEl.focus();
+  });
+
+  // ── Clear history ─────────────────────────────────────────────────────────────
+  clearHistoryBtn.addEventListener('click', () => {
+    saveHistory([]);
+    renderHistory([]);
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  renderHistory(loadHistory());
+</script>
+
+<style>
+  .hash-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Shared section label ──────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Input section ─────────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hash-textarea {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .hash-textarea::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .hash-textarea:focus {
+    outline: none;
+  }
+
+  /* ── Controls ──────────────────────────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  /* ── Shared action button ──────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover:not(:disabled) {
+    border-color: var(--border-active);
+  }
+
+  /* ── Output section ────────────────────────────────────────────────────────── */
+  .output-section {
+    border: 1px solid var(--border);
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hash-results {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hash-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hash-row:last-child {
+    border-bottom: none;
+  }
+
+  .hash-algo {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 4.5rem;
+    text-align: center;
+  }
+
+  .hash-value {
+    flex: 1;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  /* ── History ───────────────────────────────────────────────────────────────── */
+  .history-section {
+    border: 1px solid var(--border);
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-list {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .history-empty {
+    margin: 0;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.history-row) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.history-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.history-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.history-badge) {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+    min-width: 5rem;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  :global(.history-value) {
+    flex: 1;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-all;
+    min-width: 0;
+  }
+
+  :global(.history-age) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+</style>

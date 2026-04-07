@@ -1,0 +1,618 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="cron-tool">
+  <!-- Input -->
+  <div class="input-section">
+    <div class="input-header">
+      <span class="section-label">expression</span>
+      <div class="input-actions">
+        <button id="cron-copy-expr-btn" class="action-btn">copy</button>
+        <button id="cron-clear-btn" class="action-btn">clear</button>
+      </div>
+    </div>
+    <div class="fields-row">
+      <div class="field-col">
+        <input
+          id="cron-minute"
+          class="field-input"
+          type="text"
+          value="0"
+          spellcheck="false"
+          aria-label="Minute"
+        />
+        <label for="cron-minute" class="field-label">minute</label>
+      </div>
+      <span class="field-sep" aria-hidden="true"></span>
+      <div class="field-col">
+        <input
+          id="cron-hour"
+          class="field-input"
+          type="text"
+          value="9"
+          spellcheck="false"
+          aria-label="Hour"
+        />
+        <label for="cron-hour" class="field-label">hour</label>
+      </div>
+      <span class="field-sep" aria-hidden="true"></span>
+      <div class="field-col">
+        <input
+          id="cron-dom"
+          class="field-input"
+          type="text"
+          value="*"
+          spellcheck="false"
+          aria-label="Day of month"
+        />
+        <label for="cron-dom" class="field-label">day</label>
+      </div>
+      <span class="field-sep" aria-hidden="true"></span>
+      <div class="field-col">
+        <input
+          id="cron-month"
+          class="field-input"
+          type="text"
+          value="*"
+          spellcheck="false"
+          aria-label="Month"
+        />
+        <label for="cron-month" class="field-label">month</label>
+      </div>
+      <span class="field-sep" aria-hidden="true"></span>
+      <div class="field-col">
+        <input
+          id="cron-dow"
+          class="field-input"
+          type="text"
+          value="1-5"
+          spellcheck="false"
+          aria-label="Day of week"
+        />
+        <label for="cron-dow" class="field-label">weekday</label>
+      </div>
+      <button id="cron-parse-btn" class="action-btn primary">parse</button>
+    </div>
+  </div>
+
+  <!-- Presets -->
+  <div class="presets-section">
+    <span class="section-label">presets</span>
+    <div class="preset-btns" id="cron-presets" role="group" aria-label="Presets"></div>
+  </div>
+
+  <!-- Error -->
+  <p id="cron-error" class="cron-error" hidden></p>
+
+  <!-- Description output -->
+  <div id="cron-result" class="result-section" hidden>
+    <div class="result-header">
+      <span class="section-label">schedule</span>
+      <button id="cron-copy-btn" class="action-btn">copy</button>
+    </div>
+    <output
+      id="cron-description"
+      class="cron-description"
+      aria-live="polite"
+      aria-label="Human-readable schedule"></output>
+  </div>
+
+  <!-- Breakdown -->
+  <div id="cron-breakdown-section" class="breakdown-section" hidden>
+    <div class="breakdown-header">
+      <span class="section-label">breakdown</span>
+    </div>
+    <div id="cron-breakdown" class="breakdown-grid" role="table" aria-label="Field breakdown"></div>
+  </div>
+
+  <!-- Next triggers -->
+  <div id="cron-next-section" class="next-section" hidden>
+    <div class="next-header">
+      <span class="section-label">next triggers</span>
+    </div>
+    <ol id="cron-next" class="next-list" aria-label="Next scheduled triggers"></ol>
+  </div>
+</div>
+
+<script>
+  import {
+    parseCronExpression,
+    describeCron,
+    describeField,
+    getNextOccurrences,
+    formatNextDate,
+    CRON_PRESETS,
+    FIELD_CONFIGS,
+  } from '../../lib/crontab';
+
+  // ── Element refs ────────────────────────────────────────────────────────────
+  const minuteEl = document.getElementById('cron-minute') as HTMLInputElement;
+  const hourEl = document.getElementById('cron-hour') as HTMLInputElement;
+  const domEl = document.getElementById('cron-dom') as HTMLInputElement;
+  const monthEl = document.getElementById('cron-month') as HTMLInputElement;
+  const dowEl = document.getElementById('cron-dow') as HTMLInputElement;
+  const fieldInputs = [minuteEl, hourEl, domEl, monthEl, dowEl];
+  const parseBtn = document.getElementById('cron-parse-btn') as HTMLButtonElement;
+  const clearBtn = document.getElementById('cron-clear-btn') as HTMLButtonElement;
+  const copyExprBtn = document.getElementById('cron-copy-expr-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('cron-copy-btn') as HTMLButtonElement;
+  const errorEl = document.getElementById('cron-error') as HTMLParagraphElement;
+  const resultSection = document.getElementById('cron-result') as HTMLDivElement;
+  const descriptionEl = document.getElementById('cron-description') as HTMLOutputElement;
+  const breakdownSection = document.getElementById('cron-breakdown-section') as HTMLDivElement;
+  const breakdownEl = document.getElementById('cron-breakdown') as HTMLDivElement;
+  const nextSection = document.getElementById('cron-next-section') as HTMLDivElement;
+  const nextEl = document.getElementById('cron-next') as HTMLOListElement;
+  const presetsContainer = document.getElementById('cron-presets') as HTMLDivElement;
+
+  // ── Render presets ──────────────────────────────────────────────────────────
+  presetsContainer.innerHTML = CRON_PRESETS.map(
+    (p) =>
+      `<button class="preset-btn" data-expr="${p.expression}" aria-label="Use preset: ${p.label}">${p.label}</button>`,
+  ).join('');
+
+  presetsContainer.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setExpression(btn.dataset.expr ?? '');
+      parse();
+    });
+  });
+
+  function getExpression(): string {
+    return fieldInputs.map((el) => el.value.trim() || '*').join(' ');
+  }
+
+  function setExpression(expr: string): void {
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length === 5) {
+      fieldInputs.forEach((el, i) => {
+        el.value = parts[i];
+      });
+    }
+  }
+
+  // ── Parse ────────────────────────────────────────────────────────────────────
+  function parse(): void {
+    const expr = getExpression();
+    errorEl.hidden = true;
+    resultSection.hidden = true;
+    breakdownSection.hidden = true;
+    nextSection.hidden = true;
+
+    if (!expr) return;
+
+    try {
+      const parts = parseCronExpression(expr);
+
+      // Description
+      const desc = describeCron(parts);
+      descriptionEl.textContent = desc;
+      resultSection.hidden = false;
+
+      // Breakdown
+      breakdownEl.innerHTML = '';
+      for (const config of FIELD_CONFIGS) {
+        const value = parts[config.name];
+        const meaning = describeField(value, config.name);
+        const row = document.createElement('div');
+        row.className = 'breakdown-row';
+        row.setAttribute('role', 'row');
+        row.innerHTML = `
+          <span class="bd-field" role="cell">${config.label}</span>
+          <code class="bd-value" role="cell">${escapeHtml(value)}</code>
+          <span class="bd-meaning" role="cell">${escapeHtml(meaning)}</span>
+        `;
+        breakdownEl.appendChild(row);
+      }
+      breakdownSection.hidden = false;
+
+      // Next occurrences
+      const occurrences = getNextOccurrences(parts, 5);
+      nextEl.innerHTML = occurrences
+        .map((d) => `<li class="next-item">${formatNextDate(d)}</li>`)
+        .join('');
+      nextSection.hidden = occurrences.length === 0;
+    } catch (err) {
+      errorEl.textContent = err instanceof Error ? err.message : 'Invalid expression.';
+      errorEl.hidden = false;
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function parseDebounced(): void {
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(parse, 250);
+  }
+
+  parseBtn.addEventListener('click', () => {
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    parse();
+  });
+
+  fieldInputs.forEach((el) => {
+    el.addEventListener('input', parseDebounced);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        parse();
+      }
+    });
+    el.addEventListener('paste', (e) => {
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (text.trim().includes(' ')) {
+        e.preventDefault();
+        setExpression(text.trim());
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        parse();
+      }
+      // Single-field paste (no spaces) falls through to default behaviour
+    });
+  });
+
+  copyExprBtn.addEventListener('click', async () => {
+    const expr = getExpression();
+    await navigator.clipboard.writeText(expr);
+    copyExprBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyExprBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    fieldInputs.forEach((el) => {
+      el.value = '';
+    });
+    errorEl.hidden = true;
+    resultSection.hidden = true;
+    breakdownSection.hidden = true;
+    nextSection.hidden = true;
+    minuteEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    const text = descriptionEl.textContent?.trim() ?? '';
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  // ── Auto-parse default value on load ────────────────────────────────────────
+  parse();
+</script>
+
+<style>
+  .cron-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Section label ─────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Shared action button ──────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+
+  /* ── Input section ─────────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .input-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .fields-row {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .field-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .field-input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 1rem;
+    letter-spacing: 0.12em;
+    padding: 0.75rem 0.5rem 0.35rem;
+    text-align: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .field-input::placeholder {
+    color: var(--fg-dim);
+  }
+
+  .field-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .field-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    text-align: center;
+    padding: 0 0.5rem 0.5rem;
+    cursor: text;
+  }
+
+  .field-sep {
+    width: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+    align-self: stretch;
+  }
+
+  .fields-row .action-btn {
+    align-self: stretch;
+    padding: 0 1.25rem;
+    border-top-style: none;
+    border-right-style: none;
+    border-bottom-style: none;
+    border-left-width: 1px;
+    border-left-style: solid;
+    font-size: 0.75rem;
+    transition:
+      background 0.1s,
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .fields-row .action-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Presets ───────────────────────────────────────────────────────────────── */
+  .presets-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .preset-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  :global(.preset-btn) {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  :global(.preset-btn:hover) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  /* ── Error ─────────────────────────────────────────────────────────────────── */
+  .cron-error {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: #e05c5c;
+    border: 1px solid #e05c5c40;
+  }
+
+  /* ── Description output ────────────────────────────────────────────────────── */
+  .result-section {
+    border: 1px solid var(--border);
+  }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cron-description {
+    display: block;
+    padding: 1rem 0.75rem;
+    font-size: 0.95rem;
+    letter-spacing: 0.03em;
+    line-height: 1.5;
+    color: var(--fg);
+    min-height: 2.5rem;
+  }
+
+  /* ── Breakdown ─────────────────────────────────────────────────────────────── */
+  .breakdown-section {
+    border: 1px solid var(--border);
+  }
+
+  .breakdown-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .breakdown-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.breakdown-row) {
+    display: grid;
+    grid-template-columns: 7rem 6rem 1fr;
+    gap: 0;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.breakdown-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.bd-field) {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border-right: 1px solid var(--border);
+  }
+
+  :global(.bd-value) {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    color: var(--fg);
+    border-right: 1px solid var(--border);
+    font-family: inherit;
+    background: none;
+  }
+
+  :global(.bd-meaning) {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+  }
+
+  /* ── Next triggers ─────────────────────────────────────────────────────────── */
+  .next-section {
+    border: 1px solid var(--border);
+  }
+
+  .next-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .next-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  :global(.next-item) {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    color: var(--fg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  :global(.next-item:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.next-item::before) {
+    content: counter(list-item);
+    counter-increment: list-item;
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    min-width: 1.2rem;
+  }
+
+  .next-list {
+    counter-reset: list-item;
+  }
+
+  /* ── Mobile ────────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    :global(.breakdown-row) {
+      grid-template-columns: 5.5rem 4rem 1fr;
+    }
+
+    .presets-section {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .field-input {
+      font-size: 0.85rem;
+      padding: 0.65rem 0.25rem 0.3rem;
+    }
+
+    .fields-row .action-btn {
+      padding: 0 0.75rem;
+    }
+  }
+</style>

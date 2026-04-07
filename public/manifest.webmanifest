@@ -1,6 +1,6 @@
 {
   "name": "tinytask.tools",
-  "short_name": "tinytask",
+  "short_name": "tt_",
   "description": "tinytask.tools — a collection of small utilities.",
   "start_url": "/",
   "display": "standalone",

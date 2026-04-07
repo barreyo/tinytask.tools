@@ -13,9 +13,7 @@
 import { tools } from '../../data/tools';
 
 export function getStaticPaths() {
-  return tools
-    .filter((t) => !t.implemented)
-    .map((tool) => ({ params: { slug: tool.slug } }));
+  return tools.filter((t) => !t.implemented).map((tool) => ({ params: { slug: tool.slug } }));
 }
 
 return Astro.redirect('/', 307);
