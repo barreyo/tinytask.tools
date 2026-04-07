@@ -1,0 +1,338 @@
+---
+import { statusCodes } from '../../data/http-status-codes';
+const total = statusCodes.length;
+---
+
+<div class="hsc-tool">
+  <!-- Search + category filters -->
+  <div class="hsc-controls">
+    <input
+      id="hsc-search"
+      class="hsc-search"
+      type="search"
+      placeholder="Search by code, phrase, or description… (e.g. 422, rate limit, redirect)"
+      autocomplete="off"
+      spellcheck="false"
+      aria-label="Search HTTP status codes"
+    />
+    <div class="hsc-filters" role="group" aria-label="Filter by category">
+      {
+        (['All', '1xx', '2xx', '3xx', '4xx', '5xx'] as const).map((cat) => (
+          <button
+            class={`hsc-filter-btn hsc-filter-btn--${cat === 'All' ? 'all' : cat}`}
+            data-category={cat}
+            aria-pressed={cat === 'All' ? 'true' : 'false'}
+          >
+            {cat}
+          </button>
+        ))
+      }
+    </div>
+  </div>
+
+  <div id="hsc-count" class="hsc-count" aria-live="polite">
+    Showing all {total} status codes
+  </div>
+
+  <!-- Table -->
+  <div class="hsc-table-wrap" role="region" aria-label="HTTP status code list">
+    <table class="hsc-table" id="hsc-table">
+      <thead>
+        <tr>
+          <th class="hsc-th hsc-th--code">code</th>
+          <th class="hsc-th hsc-th--phrase">phrase</th>
+          <th class="hsc-th hsc-th--desc">description</th>
+        </tr>
+      </thead>
+      <tbody id="hsc-tbody">
+        {
+          statusCodes.map((s) => (
+            <tr
+              class="hsc-row"
+              data-code={String(s.code)}
+              data-phrase={s.phrase.toLowerCase()}
+              data-desc={s.description.toLowerCase()}
+              data-category={s.category}
+            >
+              <td class="hsc-td hsc-td--code">
+                <span class={`hsc-badge hsc-badge--${s.category}`}>{s.code}</span>
+              </td>
+              <td class="hsc-td hsc-td--phrase">{s.phrase}</td>
+              <td class="hsc-td hsc-td--desc">{s.description}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+
+    <div id="hsc-empty" class="hsc-empty" hidden>No status codes match your search.</div>
+  </div>
+</div>
+
+<script>
+  const searchEl = document.getElementById('hsc-search') as HTMLInputElement;
+  const countEl = document.getElementById('hsc-count') as HTMLDivElement;
+  const tbody = document.getElementById('hsc-tbody') as HTMLTableSectionElement;
+  const emptyEl = document.getElementById('hsc-empty') as HTMLDivElement;
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.hsc-filter-btn');
+
+  const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('.hsc-row'));
+  const total = rows.length;
+
+  let activeCategory = 'All';
+
+  function applyFilters() {
+    const q = searchEl.value.toLowerCase().trim();
+    let visible = 0;
+
+    for (const row of rows) {
+      const catMatch = activeCategory === 'All' || row.dataset.category === activeCategory;
+      const textMatch =
+        !q ||
+        row.dataset.code?.includes(q) ||
+        row.dataset.phrase?.includes(q) ||
+        row.dataset.desc?.includes(q);
+
+      const show = catMatch && textMatch;
+      row.hidden = !show;
+      if (show) visible++;
+    }
+
+    if (visible === 0) {
+      emptyEl.hidden = false;
+      countEl.textContent = 'No results';
+    } else {
+      emptyEl.hidden = true;
+      countEl.textContent =
+        visible === total
+          ? `Showing all ${total} status codes`
+          : `${visible} of ${total} status codes`;
+    }
+  }
+
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeCategory = btn.dataset.category ?? 'All';
+      filterBtns.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      applyFilters();
+    });
+  });
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(applyFilters, 120);
+  });
+</script>
+
+<style>
+  .hsc-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .hsc-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .hsc-search {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.9rem;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .hsc-search:focus {
+    border-color: var(--border-active);
+  }
+
+  .hsc-search::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .hsc-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .hsc-filter-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .hsc-filter-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .hsc-filter-btn[aria-pressed='true'] {
+    color: var(--fg);
+    border-color: var(--border-active);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Active category tint */
+  .hsc-filter-btn--1xx[aria-pressed='true'] {
+    border-color: #5a7a9a;
+    color: #8ab4d4;
+    background: rgba(100, 150, 210, 0.08);
+  }
+  .hsc-filter-btn--2xx[aria-pressed='true'] {
+    border-color: #3a6a4a;
+    color: #7ab890;
+    background: rgba(80, 160, 100, 0.08);
+  }
+  .hsc-filter-btn--3xx[aria-pressed='true'] {
+    border-color: #7a6a2a;
+    color: #cca84a;
+    background: rgba(200, 160, 60, 0.08);
+  }
+  .hsc-filter-btn--4xx[aria-pressed='true'] {
+    border-color: #7a4a3a;
+    color: #cc8070;
+    background: rgba(200, 100, 80, 0.08);
+  }
+  .hsc-filter-btn--5xx[aria-pressed='true'] {
+    border-color: #7a3a3a;
+    color: #c86060;
+    background: rgba(180, 70, 70, 0.08);
+  }
+
+  .hsc-count {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .hsc-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+
+  .hsc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .hsc-th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 1;
+  }
+
+  .hsc-td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    line-height: 1.5;
+  }
+
+  .hsc-row:last-child .hsc-td {
+    border-bottom: none;
+  }
+
+  .hsc-row:hover .hsc-td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* Column widths */
+  .hsc-th--code,
+  .hsc-td--code {
+    width: 72px;
+    text-align: center;
+  }
+  .hsc-th--phrase {
+    width: 220px;
+  }
+  .hsc-th--desc {
+    min-width: 260px;
+  }
+
+  /* Code badges */
+  .hsc-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--border);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hsc-badge--1xx {
+    border-color: #4a6a8a;
+    color: #8ab4d4;
+    background: rgba(80, 130, 200, 0.08);
+  }
+
+  .hsc-badge--2xx {
+    border-color: #2a5a3a;
+    color: #6aa87e;
+    background: rgba(60, 140, 80, 0.08);
+  }
+
+  .hsc-badge--3xx {
+    border-color: #6a5a1a;
+    color: #c09830;
+    background: rgba(180, 140, 40, 0.08);
+  }
+
+  .hsc-badge--4xx {
+    border-color: #6a3a2a;
+    color: #c07060;
+    background: rgba(180, 80, 60, 0.08);
+  }
+
+  .hsc-badge--5xx {
+    border-color: #6a2a2a;
+    color: #b85050;
+    background: rgba(160, 60, 60, 0.08);
+  }
+
+  .hsc-td--phrase {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .hsc-td--desc {
+    color: var(--fg-dim);
+  }
+
+  .hsc-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+  }
+</style>

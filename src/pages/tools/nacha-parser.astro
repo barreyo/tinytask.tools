@@ -1,0 +1,15 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import NachaParserTool from '../../components/tools/NachaParser.astro';
+---
+
+<ToolLayout slug="nacha-parser">
+  <NachaParserTool />
+</ToolLayout>
+
+<style is:global>
+  body:has(#nacha-input) .tool-page {
+    max-width: 1400px;
+    padding: 0 1.5rem;
+  }
+</style>

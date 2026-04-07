@@ -496,6 +496,54 @@ export const tools: Tool[] = [
     ],
   },
   {
+    slug: 'http-status-codes',
+    name: 'HTTP Status Code Reference',
+    description:
+      'A quick-search grid for HTTP status codes (1xx–5xx) with short descriptions — saves a trip to MDN when debugging a weird 422 or 409.',
+    metaDescription:
+      'Free HTTP status code reference — search all 1xx, 2xx, 3xx, 4xx, and 5xx codes with plain-English descriptions. Filter by category. Runs entirely in your browser.',
+    tags: ['http', 'status', 'api', 'reference', 'web'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What are HTTP status codes?',
+        a: 'HTTP status codes are three-digit numbers returned by a server to indicate the outcome of a client request. The first digit defines the class: 1xx (informational), 2xx (success), 3xx (redirection), 4xx (client error), and 5xx (server error).',
+      },
+      {
+        q: 'What is the difference between 4xx and 5xx errors?',
+        a: '4xx errors indicate that the problem is on the client side — the request was bad, unauthorized, or targeted a resource that does not exist. 5xx errors mean the server encountered a problem while handling a valid request. If you see a 5xx error, the issue is with the server, not your request.',
+      },
+      {
+        q: 'Are these all the HTTP status codes?',
+        a: "This reference covers all codes registered with the IANA HTTP Status Code Registry (RFC 9110 and related RFCs), plus well-known informal codes like 418 (I'm a Teapot) and 451 (Unavailable For Legal Reasons). Some proprietary APIs use non-standard codes outside this list.",
+      },
+    ],
+  },
+  {
+    slug: 'http-header-parser',
+    name: 'HTTP Header Parser',
+    description:
+      'Paste a raw HTTP header block and get a clean table with explanations for common headers like Cache-Control, Content-Type, and X-Frame-Options.',
+    metaDescription:
+      'Free online HTTP header parser — paste raw HTTP request or response headers and get a clean table with plain-English explanations. Runs entirely in your browser.',
+    tags: ['http', 'headers', 'parse', 'api', 'web'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What input formats does the parser accept?',
+        a: 'You can paste a raw HTTP response or request header block — either just the headers, or the full response including the status line (e.g. "HTTP/1.1 200 OK"). The parser automatically strips the status/request line and handles RFC 7230 header folding (continuation lines starting with whitespace).',
+      },
+      {
+        q: 'Which headers get explanations?',
+        a: 'The tool covers ~50 common request and response headers: caching headers (Cache-Control, ETag, Expires), security headers (Strict-Transport-Security, X-Frame-Options, Content-Security-Policy), CORS headers (Access-Control-Allow-Origin), content negotiation headers, authentication headers, and more. Unknown or custom headers are still shown — just without an explanation.',
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All parsing happens locally in your browser using plain JavaScript. Nothing is transmitted.',
+      },
+    ],
+  },
+  {
     slug: 'qr-code-generator',
     name: 'QR Code Generator',
     description:
@@ -528,6 +576,34 @@ export const tools: Tool[] = [
       {
         q: 'Will styled or rounded QR codes scan reliably?',
         a: 'Yes — modern smartphone cameras and QR scanner apps handle rounded dots, classy shapes, and colour-filled codes well. For maximum compatibility keep sufficient contrast between the dot colour and the background, and avoid extremely light dot colours on white backgrounds.',
+      },
+    ],
+  },
+  {
+    slug: 'nacha-parser',
+    name: 'NACHA / ACH File Parser',
+    description:
+      'Parse, highlight, validate, and generate NACHA ACH files entirely in your browser.',
+    metaDescription:
+      'Free browser-based NACHA ACH file parser and generator. View color-coded records, validate structure, inspect field details, and build new ACH files — no data leaves your device.',
+    tags: ['finance', 'parser'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is a NACHA file?',
+        a: 'A NACHA file (also called an ACH file) is a fixed-width text file used to process electronic payments through the U.S. Automated Clearing House network. Each line is exactly 94 characters and represents a record — including file headers, batch headers, individual payment entries, addenda, and control records.',
+      },
+      {
+        q: 'Is my ACH data safe in this tool?',
+        a: 'Yes. This tool runs entirely in your browser using client-side JavaScript. Your file contents, routing numbers, account numbers, and all other data never leave your device — nothing is sent to any server.',
+      },
+      {
+        q: 'Which SEC codes does this tool support?',
+        a: 'The parser handles all SEC codes since the fixed-width record layout is the same regardless of SEC code. The generator provides the most commonly used codes: PPD (Prearranged Payment/Deposit), CCD (Corporate Credit or Debit), WEB (Internet/Mobile), TEL (Telephone), and CTX (Corporate Trade Exchange).',
+      },
+      {
+        q: 'What validation does the parser perform?',
+        a: 'The parser checks record line lengths, structural ordering (header/control pairs), hash totals, entry counts, debit/credit amount totals at both the batch and file level, and service class code consistency between batch headers and control records.',
       },
     ],
   },

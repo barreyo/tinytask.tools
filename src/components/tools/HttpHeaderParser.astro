@@ -1,0 +1,341 @@
+---
+// Fully client-side — input never leaves the browser
+---
+
+<div class="header-parser">
+  <!-- Input section -->
+  <div class="input-section">
+    <div class="section-header">
+      <span class="section-label">raw headers</span>
+      <button id="clear-btn" class="action-btn">clear</button>
+    </div>
+    <textarea
+      id="header-input"
+      class="header-textarea"
+      spellcheck="false"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      rows="10"
+      placeholder="Paste raw HTTP headers here…
+
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Cache-Control: max-age=3600, public
+ETag: &quot;abc123&quot;
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Frame-Options: DENY
+Content-Length: 1024"
+      aria-label="Raw HTTP headers input"></textarea>
+  </div>
+
+  <!-- Error -->
+  <div id="parse-error" class="parse-error" role="alert" aria-live="assertive"></div>
+
+  <!-- Output section -->
+  <div id="output-section" class="output-section" hidden>
+    <div class="section-header">
+      <span class="section-label">parsed headers</span>
+      <div class="output-actions">
+        <span id="header-count" class="header-count"></span>
+        <button id="copy-table-btn" class="action-btn">copy as markdown</button>
+      </div>
+    </div>
+    <div id="header-table" class="header-table" aria-live="polite" aria-label="Parsed headers"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="empty-state">
+    <p>Paste HTTP headers above to parse them.</p>
+  </div>
+</div>
+
+<script>
+  import { parseHeaders } from '../../lib/http-header-parser';
+  import type { ParsedHeader } from '../../lib/http-header-parser';
+
+  const inputEl = document.getElementById('header-input') as HTMLTextAreaElement;
+  const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement;
+  const outputSection = document.getElementById('output-section') as HTMLDivElement;
+  const headerTable = document.getElementById('header-table') as HTMLDivElement;
+  const headerCount = document.getElementById('header-count') as HTMLSpanElement;
+  const copyTableBtn = document.getElementById('copy-table-btn') as HTMLButtonElement;
+  const parseError = document.getElementById('parse-error') as HTMLDivElement;
+  const emptyState = document.getElementById('empty-state') as HTMLDivElement;
+
+  let parsedHeaders: ParsedHeader[] = [];
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function render(headers: ParsedHeader[]): void {
+    if (headers.length === 0) {
+      outputSection.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
+
+    emptyState.hidden = true;
+    outputSection.hidden = false;
+    headerCount.textContent = `${headers.length} header${headers.length === 1 ? '' : 's'}`;
+
+    headerTable.innerHTML = headers
+      .map(
+        (h) => `
+        <div class="header-row">
+          <div class="header-name-cell">
+            <span class="header-name-badge">${escapeHtml(h.name)}</span>
+          </div>
+          <div class="header-value-cell">
+            <span class="header-value">${escapeHtml(h.value)}</span>
+            ${h.explanation ? `<span class="header-explanation">${escapeHtml(h.explanation)}</span>` : ''}
+          </div>
+        </div>`,
+      )
+      .join('');
+  }
+
+  function parse(): void {
+    const raw = inputEl.value;
+    parseError.textContent = '';
+
+    if (!raw.trim()) {
+      parsedHeaders = [];
+      outputSection.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
+
+    try {
+      parsedHeaders = parseHeaders(raw);
+      render(parsedHeaders);
+    } catch (err) {
+      parseError.textContent = (err as Error).message;
+    }
+  }
+
+  function buildMarkdownTable(headers: ParsedHeader[]): string {
+    const rows = headers.map((h) => {
+      const name = h.name.replace(/\|/g, '\\|');
+      const value = h.value.replace(/\|/g, '\\|');
+      const explanation = (h.explanation ?? '').replace(/\|/g, '\\|');
+      return `| ${name} | ${value} | ${explanation} |`;
+    });
+    return [
+      '| Header | Value | Description |',
+      '|--------|-------|-------------|',
+      ...rows,
+    ].join('\n');
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(parse, 150);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    parsedHeaders = [];
+    outputSection.hidden = true;
+    emptyState.hidden = false;
+    parseError.textContent = '';
+    inputEl.focus();
+  });
+
+  copyTableBtn.addEventListener('click', async () => {
+    if (parsedHeaders.length === 0) return;
+    const md = buildMarkdownTable(parsedHeaders);
+    await navigator.clipboard.writeText(md);
+    copyTableBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyTableBtn.textContent = 'copy as markdown';
+    }, 1200);
+  });
+</script>
+
+<style>
+  .header-parser {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Shared ────────────────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .output-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .header-count {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  /* ── Input section ─────────────────────────────────────────────────────────── */
+  .input-section {
+    border: 1px solid var(--border);
+  }
+
+  .header-textarea {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: none;
+    min-height: 180px;
+  }
+
+  .header-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.45;
+  }
+
+  /* ── Error ─────────────────────────────────────────────────────────────────── */
+  .parse-error {
+    font-size: 0.75rem;
+    color: #c87e7e;
+    min-height: 1rem;
+  }
+
+  /* ── Output section ────────────────────────────────────────────────────────── */
+  .output-section {
+    border: 1px solid var(--border);
+  }
+
+  .header-table {
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.header-row) {
+    display: grid;
+    grid-template-columns: minmax(140px, 220px) 1fr;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+
+  :global(.header-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.header-row:hover) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  :global(.header-name-cell) {
+    display: flex;
+    align-items: flex-start;
+    padding-top: 0.05rem;
+  }
+
+  :global(.header-name-badge) {
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.4rem;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  :global(.header-value-cell) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  :global(.header-value) {
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    color: var(--fg);
+    word-break: break-word;
+    line-height: 1.5;
+  }
+
+  :global(.header-explanation) {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+
+  /* ── Empty state ───────────────────────────────────────────────────────────── */
+  .empty-state {
+    font-size: 0.78rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.03em;
+    border: 1px solid var(--border);
+    padding: 1rem 0.75rem;
+  }
+
+  .empty-state p {
+    margin: 0;
+  }
+
+  @media (max-width: 540px) {
+    :global(.header-row) {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
