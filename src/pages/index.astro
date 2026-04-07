@@ -4,6 +4,7 @@ import ToolCard from '../components/ToolCard.astro';
 import ToolSearch from '../components/ToolSearch.astro';
 import { tools } from '../data/tools';
 import popularity from '../data/tool-popularity.json';
+import { getPrideColor } from '../utils/pride';
 
 const hits = popularity as Record<string, number>;
 const sortedTools = [...tools].sort((a, b) => {
@@ -13,6 +14,8 @@ const sortedTools = [...tools].sort((a, b) => {
   // Preserve original order for ties (including both at 0)
   return tools.indexOf(a) - tools.indexOf(b);
 });
+
+const now = new Date();
 
 const SITE_URL = 'https://tinytask.tools';
 
@@ -73,7 +76,22 @@ const itemListSchema = {
       </button>
       <h1 class="site-heading">
         <div class="site-logo" aria-label="tinytask.tools">
-          <span class="logo-tt">tt</span><span class="logo-cursor" aria-hidden="true">_</span>
+          <span class="logo-tt"
+            ><span class="logo-t-first"
+              >t<svg
+                class="santa-hat"
+                viewBox="0 0 18 16"
+                width="18"
+                height="16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <polygon points="9,1 17,12 1,12" fill="#cc2222"></polygon>
+                <rect x="0" y="11" width="18" height="4.5" rx="2.25" fill="#efefef"></rect>
+                <circle cx="9" cy="2.5" r="2.5" fill="#efefef"></circle>
+              </svg></span
+            >t</span
+          ><span class="logo-cursor" aria-hidden="true">_</span>
         </div>
         <span class="site-name">tinytask.tools</span>
       </h1>
@@ -86,7 +104,7 @@ const itemListSchema = {
     </header>
 
     <div class="tool-grid">
-      {sortedTools.map((tool) => <ToolCard tool={tool} />)}
+      {sortedTools.map((tool, i) => <ToolCard tool={tool} prideColor={getPrideColor(i, now)} />)}
     </div>
 
     <footer class="site-footer">
@@ -227,6 +245,80 @@ const itemListSchema = {
   document.addEventListener('astro:page-load', initHints);
 </script>
 
+<script>
+  // ── December snow effect ───────────────────────────────────────────────────
+  function initSnow() {
+    const isDecember = new Date().getMonth() === 11;
+    if (isDecember) document.body.classList.add('is-december');
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!isDecember || reducedMotion) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'snow-canvas';
+    canvas.style.cssText =
+      'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;opacity:0.35;';
+    document.body.appendChild(canvas);
+
+    const ctx = canvas.getContext('2d')!;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    const FLAKE_COUNT = 60;
+    const flakes = Array.from({ length: FLAKE_COUNT }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: 1 + Math.random() * 2.5,
+      speed: 0.4 + Math.random() * 0.8,
+      drift: (Math.random() - 0.5) * 0.3,
+      opacity: 0.4 + Math.random() * 0.6,
+    }));
+
+    let raf: number;
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const f of flakes) {
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${f.opacity})`;
+        ctx.fill();
+
+        f.y += f.speed;
+        f.x += f.drift;
+
+        if (f.y > canvas.height + 4) {
+          f.y = -4;
+          f.x = Math.random() * canvas.width;
+        }
+        if (f.x > canvas.width + 4) f.x = -4;
+        if (f.x < -4) f.x = canvas.width + 4;
+      }
+      raf = requestAnimationFrame(draw);
+    }
+
+    draw();
+
+    document.addEventListener(
+      'astro:before-preparation',
+      () => {
+        cancelAnimationFrame(raf);
+        canvas.remove();
+        window.removeEventListener('resize', resize);
+        document.body.classList.remove('is-december');
+      },
+      { once: true },
+    );
+  }
+
+  document.addEventListener('astro:page-load', initSnow);
+</script>
+
 <style>
   .page {
     min-height: 100vh;
@@ -284,6 +376,25 @@ const itemListSchema = {
 
   .logo-tt {
     color: var(--fg);
+  }
+
+  .logo-t-first {
+    position: relative;
+    display: inline-block;
+  }
+
+  .santa-hat {
+    position: absolute;
+    top: -12px;
+    left: -5px;
+    transform: rotate(-8deg);
+    display: none;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  }
+
+  :global(body.is-december) .santa-hat {
+    display: block;
   }
 
   .logo-cursor {
