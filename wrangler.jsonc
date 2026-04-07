@@ -1,8 +1,13 @@
 {
   "name": "tinytask",
   "compatibility_date": "2026-04-07",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "tinytask.tools/*", "zone_name": "tinytask.tools" },
+    { "pattern": "www.tinytask.tools/*", "zone_name": "tinytask.tools" },
+  ],
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page"
-  }
+    "not_found_handling": "404-page",
+  },
 }
