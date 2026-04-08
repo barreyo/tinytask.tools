@@ -72,7 +72,7 @@ const { totalCount } = Astro.props;
       panel.setAttribute('aria-hidden', 'true');
       input.value = '';
       setSelected(-1);
-      history.replaceState(null, '', window.location.pathname);
+      history.replaceState(history.state, '', window.location.pathname);
       // Defer DOM reset so any pending click event still fires on the correct
       // element. Calling runSearch('') immediately replaces innerHTML (removing
       // fuzzy-match <mark> nodes), which can orphan the mousedown target and
@@ -281,7 +281,7 @@ const { totalCount } = Astro.props;
       } else {
         url.searchParams.delete('q');
       }
-      history.replaceState(null, '', url.toString());
+      history.replaceState(history.state, '', url.toString());
     });
 
     input.addEventListener('keydown', (e) => {
