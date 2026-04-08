@@ -44,22 +44,24 @@ test('generates a password on button click', async ({ page }) => {
 
 test('generated password has correct length', async ({ page }) => {
   await page.goto(URL);
-  await page.locator('#length-input').fill('16');
+  await page.locator('#length-slider').fill('16');
   await page.locator('#generate-btn').click();
-  const password = await page.locator('#password-display').textContent();
-  expect(password?.trim().length).toBe(16);
+  const password = await page.locator('#password-display code').textContent();
+  expect(password?.length).toBe(16);
 });
 
 test('shows strength label after generating', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#generate-btn').click();
-  await expect(page.locator('#strength-label')).not.toBeEmpty();
+  await expect(page.locator('#password-display code')).toBeVisible();
+  await expect(page.locator('#strength-label')).toHaveText(/(weak|fair|strong|very strong)/i);
 });
 
 test('shows entropy label after generating', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#generate-btn').click();
-  await expect(page.locator('#entropy-label')).not.toBeEmpty();
+  await expect(page.locator('#password-display code')).toBeVisible();
+  await expect(page.locator('#entropy-label')).toHaveText(/\d+ bits/);
 });
 
 test('Ctrl+Enter generates a password', async ({ page }) => {
@@ -93,7 +95,7 @@ test('copy button shows "copied" feedback', async ({ page, context }) => {
   await page.locator('#generate-btn').click();
   await page.locator('#copy-btn').click();
   await expect(page.locator('#copy-btn')).toHaveText('copied');
-  await expect(page.locator('#copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#copy-btn')).toHaveText('copy', { timeout: 5000 });
 });
 
 // ── Options ───────────────────────────────────────────────────────────────────

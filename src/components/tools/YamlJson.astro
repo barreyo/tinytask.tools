@@ -169,9 +169,10 @@ Direction is auto-detected from the input."
 
   swapBtn.addEventListener('click', () => {
     if (currentOutput) {
-      inputEl.value = currentOutput;
-      // Flip direction
+      // Capture direction before mutating the input, so auto-detection
+      // still sees the original content rather than the swapped content.
       const current = getEffectiveDirection();
+      inputEl.value = currentOutput;
       manualDirection = current === 'yaml-to-json' ? 'json-to-yaml' : 'yaml-to-json';
       process();
     } else {

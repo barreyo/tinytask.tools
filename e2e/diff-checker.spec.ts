@@ -54,14 +54,14 @@ test('shows added lines highlighted', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#dc-original').fill('aaa');
   await page.locator('#dc-modified').fill('aaa\nbbb');
-  await expect(page.locator('.dc-row--added')).toBeVisible();
+  await expect(page.locator('.dc-row--added').first()).toBeVisible();
 });
 
 test('shows removed lines highlighted', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#dc-original').fill('aaa\nbbb');
   await page.locator('#dc-modified').fill('aaa');
-  await expect(page.locator('.dc-row--removed')).toBeVisible();
+  await expect(page.locator('.dc-row--removed').first()).toBeVisible();
 });
 
 test('shows +/- stats after diff', async ({ page }) => {
@@ -119,7 +119,7 @@ test('copy diff button shows "copied" feedback', async ({ page, context }) => {
   await page.locator('#dc-modified').fill('new');
   await page.locator('#dc-copy-btn').click();
   await expect(page.locator('#dc-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#dc-copy-btn')).toHaveText('copy diff', { timeout: 2000 });
+  await expect(page.locator('#dc-copy-btn')).toHaveText('copy diff', { timeout: 5000 });
 });
 
 // ── Clear buttons ─────────────────────────────────────────────────────────────

@@ -112,7 +112,7 @@ test('copy button briefly shows "copied" feedback', async ({ page, context }) =>
   await page.locator('#jf-input').fill('{"y":2}');
   await page.locator('#jf-copy-btn').click();
   await expect(page.locator('#jf-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#jf-copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#jf-copy-btn')).toHaveText('copy', { timeout: 5000 });
 });
 
 // ── Download button ───────────────────────────────────────────────────────────

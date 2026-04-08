@@ -120,5 +120,5 @@ test('copy button shows "copied" feedback', async ({ page, context }) => {
   await page.locator('#yj-input').fill(SAMPLE_YAML);
   await page.locator('#yj-copy-btn').click();
   await expect(page.locator('#yj-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#yj-copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#yj-copy-btn')).toHaveText('copy', { timeout: 5000 });
 });

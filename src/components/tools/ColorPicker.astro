@@ -99,6 +99,7 @@
   const eyedropperBtn = document.getElementById('cp-eyedropper-btn') as HTMLButtonElement;
   const eyedropperNotice = document.getElementById('cp-eyedropper-notice') as HTMLDivElement;
   const dotWhite = document.getElementById('cp-dot-white') as HTMLSpanElement;
+  const dotBlack = document.getElementById('cp-dot-black') as HTMLSpanElement;
   const historyEl = document.getElementById('cp-history') as HTMLDivElement;
   const historyClearBtn = document.getElementById('cp-history-clear') as HTMLButtonElement;
 
@@ -157,8 +158,9 @@
 
     const fmt = deriveFormats(r, g, b);
 
-    // Contrast dots
-    dotWhite.style.color = fmt.onWhite === 'black' ? '#000' : '#fff';
+    // Contrast dots — show the selected color as text on white and on black
+    dotWhite.style.color = canonical;
+    dotBlack.style.color = canonical;
 
     // Render format rows
     rowsWeb.innerHTML = '';
@@ -283,7 +285,10 @@
   });
 
   // ── Native color input ────────────────────────────────────────────────────────
-  nativeInput.addEventListener('input', () => applyColor(nativeInput.value));
+  // 'input' fires on every drag — update preview but don't add to history yet
+  nativeInput.addEventListener('input', () => applyColor(nativeInput.value, false));
+  // 'change' fires only when the picker closes — commit to history then
+  nativeInput.addEventListener('change', () => applyColor(nativeInput.value));
 
   // ── Init ──────────────────────────────────────────────────────────────────────
   applyColor('#3b82f6', false);

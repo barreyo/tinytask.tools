@@ -59,6 +59,7 @@ test('searching filters down the visible row count', async ({ page }) => {
   await page.goto(URL);
   const allCount = await page.locator('.hsc-row:not([hidden])').count();
   await page.locator('#hsc-search').fill('redirect');
+  await expect(page.locator('#hsc-count')).not.toContainText('Showing all');
   const filtered = await page.locator('.hsc-row:not([hidden])').count();
   expect(filtered).toBeLessThan(allCount);
 });

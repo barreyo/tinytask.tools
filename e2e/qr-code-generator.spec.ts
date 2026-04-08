@@ -14,13 +14,21 @@ test('shows content input on load', async ({ page }) => {
   await expect(page.locator('#qr-input')).toBeVisible();
 });
 
-test('shows empty state message on load', async ({ page }) => {
+test('shows QR code on load with default URL', async ({ page }) => {
   await page.goto(URL);
-  await expect(page.locator('#qr-empty')).toBeVisible();
+  await expect(page.locator('#qr-empty')).toBeHidden();
+  await expect(page.locator('#qr-canvas-wrap')).not.toBeEmpty();
 });
 
-test('download buttons are disabled on load', async ({ page }) => {
+test('download buttons are enabled on load with default content', async ({ page }) => {
   await page.goto(URL);
+  await expect(page.locator('#dl-png')).toBeEnabled();
+  await expect(page.locator('#dl-svg')).toBeEnabled();
+});
+
+test('download buttons become disabled when input is cleared', async ({ page }) => {
+  await page.goto(URL);
+  await page.locator('#qr-input').clear();
   await expect(page.locator('#dl-png')).toBeDisabled();
   await expect(page.locator('#dl-svg')).toBeDisabled();
 });

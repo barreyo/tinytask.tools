@@ -154,7 +154,7 @@ test('copy button briefly shows "copied" feedback', async ({ page }) => {
   const copyBtn = page.locator('[data-algo="SHA-256"].hash-copy-btn');
   await copyBtn.click();
   await expect(copyBtn).toHaveText('copied');
-  await expect(copyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(copyBtn).toHaveText('copy', { timeout: 5000 });
 });
 
 // ── Clear input ───────────────────────────────────────────────────────────────

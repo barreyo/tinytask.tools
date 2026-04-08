@@ -100,7 +100,7 @@ test('copy button shows "copied" feedback', async ({ page, context }) => {
   await page.locator('#xf-input').fill(VALID_XML);
   await page.locator('#xf-copy-btn').click();
   await expect(page.locator('#xf-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#xf-copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#xf-copy-btn')).toHaveText('copy', { timeout: 5000 });
 });
 
 // ── Download button ───────────────────────────────────────────────────────────

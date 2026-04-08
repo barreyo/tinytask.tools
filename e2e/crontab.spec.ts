@@ -63,10 +63,10 @@ test('next triggers list shows 5 items', async ({ page }) => {
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
-test('typing a new expression and clicking parse updates the description', async ({ page }) => {
+test('typing a new expression and pressing Enter updates the description', async ({ page }) => {
   await page.goto(URL);
   await fillExpression(page, '* * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-description')).toHaveText('Every minute');
 });
 
@@ -81,7 +81,7 @@ test('pressing Enter in a field triggers parse', async ({ page }) => {
 test('description reflects the parsed expression', async ({ page }) => {
   await page.goto(URL);
   await fillExpression(page, '*/15 * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   const desc = await page.locator('#cron-description').textContent();
   expect(desc?.toLowerCase()).toMatch(/15 minute/);
 });
@@ -91,7 +91,7 @@ test('description reflects the parsed expression', async ({ page }) => {
 test('invalid expression shows error message', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cron-minute').fill('not');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-error')).toBeVisible();
   await expect(page.locator('#cron-description')).toBeHidden();
 });
@@ -99,7 +99,7 @@ test('invalid expression shows error message', async ({ page }) => {
 test('error shows for out-of-range field', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cron-minute').fill('60');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-error')).toBeVisible();
   await expect(page.locator('#cron-error')).toContainText(/Minute/i);
 });
@@ -107,11 +107,11 @@ test('error shows for out-of-range field', async ({ page }) => {
 test('error clears when a valid expression is parsed after an invalid one', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cron-minute').fill('99');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-error')).toBeVisible();
 
   await fillExpression(page, '0 12 * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-error')).toBeHidden();
   await expect(page.locator('#cron-description')).not.toBeEmpty();
 });
@@ -119,7 +119,7 @@ test('error clears when a valid expression is parsed after an invalid one', asyn
 test('breakdown and next triggers are hidden when expression is invalid', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cron-minute').fill('wrong');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await expect(page.locator('#cron-breakdown-section')).toBeHidden();
   await expect(page.locator('#cron-next-section')).toBeHidden();
 });
@@ -130,7 +130,7 @@ test('copy button copies the description to clipboard', async ({ page, context }
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto(URL);
   await fillExpression(page, '* * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await page.locator('#cron-copy-btn').click();
 
   const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
@@ -141,7 +141,7 @@ test('copy button text changes to "copied" then reverts', async ({ page, context
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto(URL);
   await fillExpression(page, '* * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
   await page.locator('#cron-copy-btn').click();
   await expect(page.locator('#cron-copy-btn')).toHaveText('copied');
   await expect(page.locator('#cron-copy-btn')).toHaveText('copy', { timeout: 3000 });
@@ -204,7 +204,7 @@ test('clicking a preset auto-parses and shows breakdown', async ({ page }) => {
 test('breakdown rows display field name, raw value, and meaning', async ({ page }) => {
   await page.goto(URL);
   await fillExpression(page, '0 9 * * 1-5');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
 
   const firstRow = page.locator('.breakdown-row').first();
   await expect(firstRow.locator('.bd-field')).toBeVisible();
@@ -215,7 +215,7 @@ test('breakdown rows display field name, raw value, and meaning', async ({ page 
 test('breakdown shows the raw cron value in the value cell', async ({ page }) => {
   await page.goto(URL);
   await fillExpression(page, '*/15 * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
 
   const minuteRow = page.locator('.breakdown-row').first();
   await expect(minuteRow.locator('.bd-value')).toHaveText('*/15');
@@ -226,7 +226,7 @@ test('breakdown shows the raw cron value in the value cell', async ({ page }) =>
 test('next trigger items contain formatted date strings', async ({ page }) => {
   await page.goto(URL);
   await fillExpression(page, '* * * * *');
-  await page.locator('#cron-parse-btn').click();
+  await page.locator('#cron-minute').press('Enter');
 
   const items = page.locator('.next-item');
   await expect(items).toHaveCount(5);

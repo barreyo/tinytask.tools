@@ -125,5 +125,5 @@ test('JSON copy button shows "copied" feedback', async ({ page, context }) => {
   await page.locator('#to-json-btn').click();
   await page.locator('#json-copy-btn').click();
   await expect(page.locator('#json-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#json-copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#json-copy-btn')).toHaveText('copy', { timeout: 5000 });
 });

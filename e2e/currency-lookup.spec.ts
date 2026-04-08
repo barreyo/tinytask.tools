@@ -44,8 +44,8 @@ test('searching "USD" shows the US dollar row', async ({ page }) => {
 test('searching by code hides non-matching rows', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cl-search').fill('EUR');
-  const visibleRows = page.locator('.cl-row:not([hidden])');
-  const count = await visibleRows.count();
+  await expect(page.locator('#cl-count')).not.toContainText('Showing all');
+  const count = await page.locator('.cl-row:not([hidden])').count();
   expect(count).toBeLessThan(10);
 });
 
@@ -79,9 +79,11 @@ test('shows empty state when no currencies match', async ({ page }) => {
 test('clearing search restores all rows', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#cl-search').fill('USD');
+  await expect(page.locator('#cl-count')).not.toContainText('Showing all');
   const filtered = await page.locator('.cl-row:not([hidden])').count();
 
   await page.locator('#cl-search').fill('');
+  await expect(page.locator('#cl-count')).toContainText('Showing all');
   const all = await page.locator('.cl-row:not([hidden])').count();
   expect(all).toBeGreaterThan(filtered);
 });

@@ -58,7 +58,7 @@ test('shows SVG preview after optimization', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#svg-input').fill(SAMPLE_SVG);
   await page.locator('#optimize-btn').click();
-  await expect(page.locator('#svg-preview')).not.toBeEmpty();
+  await expect(page.locator('#svg-preview svg')).toBeVisible();
 });
 
 // ── Copy button ───────────────────────────────────────────────────────────────

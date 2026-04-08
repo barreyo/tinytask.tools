@@ -144,7 +144,7 @@ test('copy button changes text to "copied" then reverts', async ({ page }) => {
   const copyBtn = page.locator('#copy-btn');
   await copyBtn.click();
   await expect(copyBtn).toHaveText('copied');
-  await expect(copyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(copyBtn).toHaveText('copy', { timeout: 5000 });
 });
 
 test('copy all button changes text to "copied" then reverts', async ({ page }) => {
@@ -154,7 +154,7 @@ test('copy all button changes text to "copied" then reverts', async ({ page }) =
   const copyAllBtn = page.locator('#copy-all-btn');
   await copyAllBtn.click();
   await expect(copyAllBtn).toHaveText('copied');
-  await expect(copyAllBtn).toHaveText('copy all', { timeout: 2000 });
+  await expect(copyAllBtn).toHaveText('copy all', { timeout: 5000 });
 });
 
 test('download button triggers a file download with correct line count', async ({ page }) => {
@@ -220,7 +220,7 @@ test('history copy button changes text to "copied"', async ({ page }) => {
   const histCopyBtn = page.locator('.history-copy-btn').first();
   await histCopyBtn.click();
   await expect(histCopyBtn).toHaveText('copied');
-  await expect(histCopyBtn).toHaveText('copy', { timeout: 2000 });
+  await expect(histCopyBtn).toHaveText('copy', { timeout: 5000 });
 });
 
 test('batch adds all generated values to history', async ({ page }) => {

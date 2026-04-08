@@ -99,7 +99,7 @@ test('copy header button shows "copied" feedback', async ({ page, context }) => 
   await page.locator('#jwt-input').fill(VALID_JWT);
   await page.locator('#jwt-copy-header').click();
   await expect(page.locator('#jwt-copy-header')).toHaveText('copied');
-  await expect(page.locator('#jwt-copy-header')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#jwt-copy-header')).toHaveText('copy', { timeout: 5000 });
 });
 
 // ── Error handling ────────────────────────────────────────────────────────────

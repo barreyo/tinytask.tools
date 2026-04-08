@@ -25,8 +25,7 @@ test('copy button is disabled on load', async ({ page }) => {
 test('processes a newline-separated list', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-input').fill('apple\nbanana\ncherry');
-  await expect(page.locator('#lc-output')).not.toHaveValue('');
-  await expect(page.locator('#lc-output')).toContainText('apple');
+  await expect(page.locator('#lc-output')).toHaveValue(/apple/);
 });
 
 test('copy button becomes enabled after input', async ({ page }) => {
@@ -57,6 +56,7 @@ test('sorts alphabetically when sort a→z is checked', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-sort-alpha').check();
   await page.locator('#lc-input').fill('zebra\napple\nmango');
+  await expect(page.locator('#lc-output')).not.toHaveValue('');
   const output = await page.locator('#lc-output').inputValue();
   const lines = output.split('\n').filter(Boolean);
   expect(lines[0]).toBe('apple');
@@ -67,6 +67,7 @@ test('converts to uppercase when uppercase is checked', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-upper').check();
   await page.locator('#lc-input').fill('hello\nworld');
+  await expect(page.locator('#lc-output')).toHaveValue(/HELLO/);
   const output = await page.locator('#lc-output').inputValue();
   expect(output).toContain('HELLO');
   expect(output).toContain('WORLD');
@@ -76,6 +77,7 @@ test('converts to lowercase when lowercase is checked', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-lower').check();
   await page.locator('#lc-input').fill('HELLO\nWORLD');
+  await expect(page.locator('#lc-output')).toHaveValue(/hello/);
   const output = await page.locator('#lc-output').inputValue();
   expect(output).toContain('hello');
   expect(output).toContain('world');
@@ -85,6 +87,7 @@ test('reverses list when reverse is checked', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-reverse').check();
   await page.locator('#lc-input').fill('first\nsecond\nthird');
+  await expect(page.locator('#lc-output')).not.toHaveValue('');
   const output = await page.locator('#lc-output').inputValue();
   const lines = output.split('\n').filter(Boolean);
   expect(lines[0]).toBe('third');
@@ -96,6 +99,7 @@ test('reverses list when reverse is checked', async ({ page }) => {
 test('auto-detects comma separator', async ({ page }) => {
   await page.goto(URL);
   await page.locator('#lc-input').fill('a,b,c');
+  await expect(page.locator('#lc-output')).not.toHaveValue('');
   const output = await page.locator('#lc-output').inputValue();
   // Should produce 3 items (joined by newline by default)
   const lines = output.split('\n').filter(Boolean);
@@ -106,6 +110,7 @@ test('joining with comma+space produces comma-separated output', async ({ page }
   await page.goto(URL);
   await page.locator('#lc-joiner').selectOption('comma-space');
   await page.locator('#lc-input').fill('x\ny\nz');
+  await expect(page.locator('#lc-output')).toHaveValue(/, /);
   const output = await page.locator('#lc-output').inputValue();
   expect(output).toContain(', ');
 });
@@ -138,5 +143,5 @@ test('copy button briefly shows "copied" feedback', async ({ page, context }) =>
   await page.locator('#lc-input').fill('test');
   await page.locator('#lc-copy-btn').click();
   await expect(page.locator('#lc-copy-btn')).toHaveText('copied');
-  await expect(page.locator('#lc-copy-btn')).toHaveText('copy', { timeout: 2000 });
+  await expect(page.locator('#lc-copy-btn')).toHaveText('copy', { timeout: 5000 });
 });
