@@ -86,9 +86,42 @@ const faqSchema =
   <script define:vars={{ slug }}>
     navigator.sendBeacon?.('/api/hit?tool=' + slug);
   </script>
+
+  <script>
+    document.addEventListener('astro:page-load', () => {
+      if (!document.querySelector('.tool-page')) return;
+
+      function handleEscape(e: KeyboardEvent) {
+        if (e.key !== 'Escape') return;
+        // Respect tools that already handled this event
+        if (e.defaultPrevented) return;
+        // Don't interfere while the user is typing or using a form control
+        const active = document.activeElement as HTMLElement | null;
+        if (active) {
+          const tag = active.tagName.toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select' || active.isContentEditable)
+            return;
+        }
+        e.preventDefault();
+        const backLink = document.querySelector<HTMLAnchorElement>('a.back-link');
+        if (backLink) backLink.click();
+        else window.location.href = '/';
+      }
+
+      document.addEventListener('keydown', handleEscape);
+      document.addEventListener(
+        'astro:before-swap',
+        () => {
+          document.removeEventListener('keydown', handleEscape);
+        },
+        { once: true },
+      );
+    });
+  </script>
   <div class="tool-page">
     <nav class="tool-nav">
       <a href="/" class="back-link">← tt_</a>
+      <kbd class="back-kbd">esc</kbd>
     </nav>
 
     <header class="tool-header" style={`view-transition-name: tool-card-${slug}`}>
@@ -129,6 +162,9 @@ const faqSchema =
   .tool-nav {
     padding: 1.5rem 0;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .back-link {
@@ -141,6 +177,29 @@ const faqSchema =
 
   .back-link:hover {
     color: var(--fg);
+  }
+
+  .back-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    background: transparent;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  @media (max-width: 480px) {
+    .back-kbd {
+      display: none;
+    }
   }
 
   .tool-header {
