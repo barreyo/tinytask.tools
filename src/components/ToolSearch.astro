@@ -83,9 +83,21 @@ const { totalCount } = Astro.props;
     // Close when clicking outside the panel. Using mousedown so the subsequent
     // click event still reaches tool card links and triggers navigation.
     function handleOutsideClick(e) {
-      if (panel.classList.contains('is-open') && !panel.contains(e.target)) {
-        closeSearch();
+      if (!panel.classList.contains('is-open') || panel.contains(e.target)) return;
+
+      // When the user clicks a tool card, only close the panel visually and
+      // return immediately. Calling the full closeSearch() here (which runs
+      // history.replaceState synchronously) interferes with Astro's
+      // ClientRouter before the click event fires, preventing navigation.
+      // The click event will still fire on the card link and trigger navigation.
+      if (e.target.closest('.tool-card-wrapper')) {
+        panel.classList.remove('is-open');
+        backdrop.classList.remove('is-open');
+        panel.setAttribute('aria-hidden', 'true');
+        return;
       }
+
+      closeSearch();
     }
 
     // ── Fuzzy (subsequence) match — names only ───────────────────────────────
