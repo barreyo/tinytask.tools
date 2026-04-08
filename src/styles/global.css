@@ -214,3 +214,39 @@ label[for],
 summary {
   cursor: pointer;
 }
+
+/* ─── View transitions ───────────────────────────────────────────────────────── */
+@supports (view-transition-name: none) {
+  /* Page-level crossfade: keep it snappy */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.15s;
+    animation-timing-function: ease;
+  }
+
+  /* Named card → tool header morph: smooth material-style ease */
+  ::view-transition-group(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Reduced motion: disable the morph, use a simple crossfade instead */
+  @media (prefers-reduced-motion: reduce) {
+    /* Strip named view-transition-names so no morph groups are created */
+    .tool-card,
+    .tool-header {
+      view-transition-name: none !important;
+    }
+
+    /* Gentle fade for the root page transition */
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      animation-duration: 0.2s;
+      animation-timing-function: ease;
+    }
+
+    ::view-transition-group(*) {
+      animation-duration: 0.2s;
+    }
+  }
+}

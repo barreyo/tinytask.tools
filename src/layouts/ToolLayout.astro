@@ -91,7 +91,7 @@ const faqSchema =
       <a href="/" class="back-link">← tt_</a>
     </nav>
 
-    <header class="tool-header">
+    <header class="tool-header" style={`view-transition-name: tool-card-${slug}`}>
       <h1 class="tool-title">{tool?.name}</h1>
       {tool?.description && <p class="tool-desc">{tool.description}</p>}
     </header>

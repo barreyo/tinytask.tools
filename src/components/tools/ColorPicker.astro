@@ -1,0 +1,596 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="cp-tool">
+  <!-- Preview + picker controls -->
+  <div class="cp-top">
+    <div class="cp-preview-wrap">
+      <div id="cp-swatch" class="cp-swatch" style="background:#3b82f6" aria-label="Color preview">
+      </div>
+      <div id="cp-contrast-dots" class="cp-contrast-dots">
+        <span id="cp-dot-white" class="cp-dot" style="background:white">Aa</span>
+        <span id="cp-dot-black" class="cp-dot" style="background:black;color:white">Aa</span>
+      </div>
+    </div>
+
+    <div class="cp-controls">
+      <div class="cp-picker-row">
+        <button
+          id="cp-eyedropper-btn"
+          class="action-btn primary"
+          aria-label="Pick color from screen"
+        >
+          ⊕ pick from screen
+        </button>
+        <div id="cp-eyedropper-notice" class="cp-api-notice" hidden>
+          EyeDropper API not available in this browser — use the hex input below.
+        </div>
+      </div>
+
+      <div class="cp-hex-row">
+        <label for="cp-hex-input" class="section-label">hex</label>
+        <input
+          id="cp-hex-input"
+          class="cp-hex-input"
+          type="text"
+          value="#3b82f6"
+          maxlength="7"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Hex color input"
+        />
+        <input
+          id="cp-native-input"
+          class="cp-native-input"
+          type="color"
+          value="#3b82f6"
+          aria-label="Native color picker"
+          title="Open native color picker"
+        />
+      </div>
+
+      <!-- History strip -->
+      <div class="cp-history-wrap">
+        <span class="section-label">recent</span>
+        <div id="cp-history" class="cp-history" aria-label="Recent colors"></div>
+        <button
+          id="cp-history-clear"
+          class="action-btn cp-history-clear"
+          aria-label="Clear history"
+          title="Clear history">×</button
+        >
+      </div>
+    </div>
+  </div>
+
+  <!-- Format output table -->
+  <div id="cp-formats" class="cp-formats">
+    <div class="cp-group">
+      <div class="cp-group-label">CSS / Web</div>
+      <div id="cp-rows-web" class="cp-rows"></div>
+    </div>
+    <div class="cp-group">
+      <div class="cp-group-label">Design Tools</div>
+      <div id="cp-rows-design" class="cp-rows"></div>
+    </div>
+    <div class="cp-group">
+      <div class="cp-group-label">Modern CSS</div>
+      <div id="cp-rows-modern" class="cp-rows"></div>
+    </div>
+    <div class="cp-group">
+      <div class="cp-group-label">Accessibility</div>
+      <div id="cp-rows-a11y" class="cp-rows"></div>
+    </div>
+    <div class="cp-group">
+      <div class="cp-group-label">Other</div>
+      <div id="cp-rows-other" class="cp-rows"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { hexToRgb, deriveFormats } from '../../lib/color-picker';
+
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const swatchEl = document.getElementById('cp-swatch') as HTMLDivElement;
+  const hexInput = document.getElementById('cp-hex-input') as HTMLInputElement;
+  const nativeInput = document.getElementById('cp-native-input') as HTMLInputElement;
+  const eyedropperBtn = document.getElementById('cp-eyedropper-btn') as HTMLButtonElement;
+  const eyedropperNotice = document.getElementById('cp-eyedropper-notice') as HTMLDivElement;
+  const dotWhite = document.getElementById('cp-dot-white') as HTMLSpanElement;
+  const historyEl = document.getElementById('cp-history') as HTMLDivElement;
+  const historyClearBtn = document.getElementById('cp-history-clear') as HTMLButtonElement;
+
+  const rowsWeb = document.getElementById('cp-rows-web') as HTMLDivElement;
+  const rowsDesign = document.getElementById('cp-rows-design') as HTMLDivElement;
+  const rowsModern = document.getElementById('cp-rows-modern') as HTMLDivElement;
+  const rowsA11y = document.getElementById('cp-rows-a11y') as HTMLDivElement;
+  const rowsOther = document.getElementById('cp-rows-other') as HTMLDivElement;
+
+  // ── EyeDropper feature detect ─────────────────────────────────────────────────
+  const hasEyeDropper =
+    typeof (window as Window & { EyeDropper?: unknown }).EyeDropper !== 'undefined';
+  if (!hasEyeDropper) {
+    eyedropperBtn.hidden = true;
+    eyedropperNotice.hidden = false;
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────────
+  const MAX_HISTORY = 16;
+  let history: string[] = [];
+
+  function addToHistory(hex: string): void {
+    history = [hex, ...history.filter((h) => h !== hex)].slice(0, MAX_HISTORY);
+    renderHistory();
+  }
+
+  function renderHistory(): void {
+    historyEl.innerHTML = '';
+    history.forEach((hex) => {
+      const chip = document.createElement('button');
+      chip.className = 'cp-history-chip';
+      chip.style.background = hex;
+      chip.title = hex;
+      chip.setAttribute('aria-label', `Pick ${hex}`);
+      chip.addEventListener('click', () => applyColor(hex));
+      historyEl.appendChild(chip);
+    });
+  }
+
+  historyClearBtn.addEventListener('click', () => {
+    history = [];
+    renderHistory();
+  });
+
+  // ── Apply color ───────────────────────────────────────────────────────────────
+  function applyColor(hex: string, addHistory = true): void {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return;
+
+    const { r, g, b } = rgb;
+    const canonical = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+    swatchEl.style.background = canonical;
+    if (hexInput.value !== canonical) hexInput.value = canonical;
+    if (nativeInput.value !== canonical) nativeInput.value = canonical;
+
+    const fmt = deriveFormats(r, g, b);
+
+    // Contrast dots
+    dotWhite.style.color = fmt.onWhite === 'black' ? '#000' : '#fff';
+
+    // Render format rows
+    rowsWeb.innerHTML = '';
+    rowsDesign.innerHTML = '';
+    rowsModern.innerHTML = '';
+    rowsA11y.innerHTML = '';
+    rowsOther.innerHTML = '';
+
+    const webRows: [string, string][] = [
+      ['hex (lower)', fmt.hex],
+      ['hex (upper)', fmt.hexUpper],
+      ['rgb', fmt.rgb],
+      ['rgb values', fmt.rgbValues],
+      ['hsl', fmt.hsl],
+      ['hsl values', fmt.hslValues],
+      ['hwb', fmt.hwb],
+    ];
+    if (fmt.cssNamed) webRows.push(['css named', fmt.cssNamed]);
+
+    const designRows: [string, string][] = [
+      ['hsv / hsb', fmt.hsv],
+      ['cmyk', fmt.cmyk],
+    ];
+
+    const modernRows: [string, string][] = [
+      ['oklch', fmt.oklch],
+      ['lch', fmt.lch],
+      ['display-p3', fmt.p3],
+    ];
+
+    const a11yRows: [string, string][] = [
+      ['contrast on white', fmt.contrastWhite],
+      ['contrast on black', fmt.contrastBlack],
+    ];
+
+    const otherRows: [string, string][] = [
+      ['integer (24-bit)', fmt.integer],
+      ['float / glsl vec3', fmt.floatVec],
+    ];
+
+    renderRows(rowsWeb, webRows);
+    renderRows(rowsDesign, designRows);
+    renderRows(rowsModern, modernRows);
+    renderRows(rowsA11y, a11yRows);
+    renderRows(rowsOther, otherRows);
+
+    if (addHistory) addToHistory(canonical);
+  }
+
+  function renderRows(container: HTMLDivElement, rows: [string, string][]): void {
+    rows.forEach(([label, value]) => {
+      const row = document.createElement('div');
+      row.className = 'cp-row';
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-label', `Copy ${label}: ${value}`);
+      row.title = 'Click to copy';
+
+      row.innerHTML = `
+        <span class="cp-row-label">${escHtml(label)}</span>
+        <span class="cp-row-value">${escHtml(value)}</span>
+        <span class="cp-row-copy">copy</span>
+      `;
+
+      const doCopy = async () => {
+        await navigator.clipboard.writeText(value);
+        const copySpan = row.querySelector('.cp-row-copy') as HTMLSpanElement;
+        copySpan.textContent = '✓';
+        row.classList.add('cp-row--copied');
+        setTimeout(() => {
+          copySpan.textContent = 'copy';
+          row.classList.remove('cp-row--copied');
+        }, 1200);
+      };
+
+      row.addEventListener('click', doCopy);
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') doCopy();
+      });
+      container.appendChild(row);
+    });
+  }
+
+  function escHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── EyeDropper ────────────────────────────────────────────────────────────────
+  eyedropperBtn.addEventListener('click', async () => {
+    const ED = (
+      window as Window & { EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> } }
+    ).EyeDropper;
+    const dropper = new ED();
+    try {
+      eyedropperBtn.textContent = '…waiting';
+      eyedropperBtn.disabled = true;
+      const result = await dropper.open();
+      applyColor(result.sRGBHex);
+    } catch {
+      // User cancelled — no-op
+    } finally {
+      eyedropperBtn.textContent = '⊕ pick from screen';
+      eyedropperBtn.disabled = false;
+    }
+  });
+
+  // ── Hex input ─────────────────────────────────────────────────────────────────
+  hexInput.addEventListener('input', () => {
+    const val = hexInput.value.trim();
+    if (/^#?[0-9a-fA-F]{3}$/.test(val) || /^#?[0-9a-fA-F]{6}$/.test(val)) {
+      applyColor(val.startsWith('#') ? val : `#${val}`, false);
+    }
+  });
+
+  hexInput.addEventListener('change', () => {
+    const val = hexInput.value.trim();
+    if (hexToRgb(val)) addToHistory(val.startsWith('#') ? val : `#${val}`);
+  });
+
+  // ── Native color input ────────────────────────────────────────────────────────
+  nativeInput.addEventListener('input', () => applyColor(nativeInput.value));
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  applyColor('#3b82f6', false);
+</script>
+
+<style>
+  .cp-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Top row ─────────────────────────────────────────────────────────────── */
+  .cp-top {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  /* ── Swatch ──────────────────────────────────────────────────────────────── */
+  .cp-preview-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .cp-swatch {
+    width: 120px;
+    height: 120px;
+    border: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .cp-contrast-dots {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .cp-dot {
+    width: 56px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    user-select: none;
+    transition: color 0.15s;
+  }
+
+  /* ── Controls ────────────────────────────────────────────────────────────── */
+  .cp-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cp-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .cp-api-notice {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.02em;
+  }
+
+  .cp-hex-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+
+  .cp-hex-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    padding: 0.4rem 0.6rem;
+    width: 9rem;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .cp-hex-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .cp-native-input {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border);
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .cp-native-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .cp-native-input::-webkit-color-swatch {
+    border: none;
+  }
+
+  /* ── History ─────────────────────────────────────────────────────────────── */
+  .cp-history-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .cp-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* :global because chips are created dynamically */
+  :global(.cp-history-chip) {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    padding: 0;
+    transition:
+      border-color 0.1s,
+      transform 0.1s;
+    flex-shrink: 0;
+  }
+
+  :global(.cp-history-chip:hover) {
+    border-color: var(--border-active);
+    transform: scale(1.15);
+  }
+
+  .cp-history-clear {
+    font-size: 1rem;
+    padding: 0.1rem 0.4rem;
+    line-height: 1;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  /* ── Format table ────────────────────────────────────────────────────────── */
+  .cp-formats {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+  }
+
+  .cp-group {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cp-group:last-child {
+    border-bottom: none;
+  }
+
+  .cp-group-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cp-rows {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* :global because rows are created dynamically */
+  :global(.cp-row) {
+    display: grid;
+    grid-template-columns: 11rem 1fr 3rem;
+    align-items: center;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.08s;
+    gap: 0.5rem;
+    outline: none;
+  }
+
+  :global(.cp-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.cp-row:hover),
+  :global(.cp-row:focus-visible) {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  :global(.cp-row--copied) {
+    background: rgba(126, 200, 160, 0.06) !important;
+  }
+
+  :global(.cp-row-label) {
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+
+  :global(.cp-row-value) {
+    font-size: 0.8rem;
+    color: var(--fg);
+    font-family: inherit;
+    letter-spacing: 0.02em;
+    word-break: break-all;
+  }
+
+  :global(.cp-row-copy) {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    text-align: right;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  :global(.cp-row:hover .cp-row-copy),
+  :global(.cp-row:focus-visible .cp-row-copy) {
+    opacity: 1;
+  }
+
+  :global(.cp-row--copied .cp-row-copy) {
+    opacity: 1;
+    color: #7ec8a0;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .cp-top {
+      flex-direction: column;
+    }
+
+    .cp-preview-wrap {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+
+    .cp-swatch {
+      width: 80px;
+      height: 80px;
+    }
+
+    :global(.cp-row) {
+      grid-template-columns: 8rem 1fr 2.5rem;
+    }
+  }
+</style>

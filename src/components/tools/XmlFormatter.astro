@@ -1,0 +1,432 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="xf-tool">
+  <!-- Input pane -->
+  <div class="xf-pane xf-pane--input">
+    <div class="xf-pane-header">
+      <span class="xf-pane-label">input</span>
+      <div class="xf-pane-actions">
+        <button id="xf-upload-btn" class="action-btn" aria-label="Upload XML file">upload</button>
+        <input
+          id="xf-file-input"
+          type="file"
+          accept=".xml,.xsd,.xsl,.xslt,.svg,.txt"
+          aria-hidden="true"
+          tabindex="-1"
+        />
+        <button id="xf-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="xf-editor-wrap">
+      <textarea
+        id="xf-input"
+        class="xf-textarea"
+        placeholder="Paste XML here…"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="XML input"></textarea>
+    </div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="xf-pane xf-pane--output">
+    <div class="xf-pane-header">
+      <span class="xf-pane-label">output</span>
+      <div class="xf-pane-actions">
+        <button
+          id="xf-copy-btn"
+          class="action-btn"
+          disabled
+          aria-label="Copy formatted XML to clipboard">copy</button
+        >
+        <button
+          id="xf-download-btn"
+          class="action-btn"
+          disabled
+          aria-label="Download formatted XML as file">download</button
+        >
+      </div>
+    </div>
+    <div id="xf-output" class="xf-output" aria-live="polite" aria-label="Formatted XML output">
+      <span class="xf-placeholder">formatted output will appear here</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { formatXml, highlightXml, escapeHtml } from '../../lib/xml-formatter';
+
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('xf-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('xf-output') as HTMLDivElement;
+  const uploadBtn = document.getElementById('xf-upload-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('xf-file-input') as HTMLInputElement;
+  const clearBtn = document.getElementById('xf-clear-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('xf-copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('xf-download-btn') as HTMLButtonElement;
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let formattedXml = '';
+
+  // ── Main format function ─────────────────────────────────────────────────────
+  function process() {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      formattedXml = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      outputEl.innerHTML = '<span class="xf-placeholder">formatted output will appear here</span>';
+      return;
+    }
+
+    const result = formatXml(src);
+
+    if (result.error) {
+      formattedXml = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+
+      const { message, line, col } = result.error;
+      const srcLines = src.split('\n');
+      const errLine = line != null ? line - 1 : null; // 0-indexed
+
+      if (errLine !== null && errLine >= 0 && errLine < srcLines.length) {
+        const rows: string[] = srcLines.map((rawLine, i) => {
+          const isError = i === errLine;
+          const rowClass = isError ? ' class="xf-line--error"' : '';
+          const lineNum = `<span class="xf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+          const lineContent = `<span class="xf-lc">${escapeHtml(rawLine) || '\u00a0'}</span>`;
+          let row = `<div${rowClass}>${lineNum}${lineContent}</div>`;
+
+          if (isError) {
+            const caretCol = col != null ? col - 1 : 0;
+            const caretPad = '\u00a0'.repeat(Math.max(0, caretCol));
+            const caretRow = `<div class="xf-line--caret"><span class="xf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="xf-lc">${caretPad}<span class="xf-caret">^</span></span></div>`;
+            const msgRow = `<div class="xf-line--msg"><span class="xf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="xf-lc xf-error-msg">${escapeHtml(message)}</span></div>`;
+            row += caretRow + msgRow;
+          }
+
+          return row;
+        });
+
+        outputEl.innerHTML = `<pre class="xf-pre">${rows.join('')}</pre>`;
+      } else {
+        outputEl.innerHTML = `<pre class="xf-pre"><div class="xf-line--msg"><span class="xf-lc xf-error-msg">${escapeHtml(message)}</span></div></pre>`;
+      }
+
+      outputEl.classList.add('xf-output--error');
+
+      const errorLineEl = outputEl.querySelector('.xf-line--error');
+      if (errorLineEl) {
+        errorLineEl.scrollIntoView({ block: 'nearest' });
+      }
+    } else {
+      formattedXml = result.formatted;
+      const highlighted = highlightXml(formattedXml);
+
+      // Build line-numbered output
+      const lines = highlighted.split('\n');
+      const rows = lines.map((line, i) => {
+        const lineNum = `<span class="xf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+        return `<div>${lineNum}<span class="xf-lc">${line || '\u00a0'}</span></div>`;
+      });
+
+      outputEl.innerHTML = `<pre class="xf-pre">${rows.join('')}</pre>`;
+      outputEl.classList.remove('xf-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    }
+  }
+
+  // ── Debounce ─────────────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function debouncedProcess() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  uploadBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      inputEl.value = (e.target?.result as string) ?? '';
+      process();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!formattedXml) return;
+    await navigator.clipboard.writeText(formattedXml);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!formattedXml) return;
+    const blob = new Blob([formattedXml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'formatted.xml';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  inputEl.addEventListener('input', debouncedProcess);
+</script>
+
+<style>
+  /* ── Tool-specific design tokens ─────────────────────────────────────────── */
+  .xf-tool {
+    --xml-tag: #c8b4f0;
+    --xml-attr-name: #7aabcc;
+    --xml-attr-value: #7ec8a0;
+    --xml-comment: #555;
+    --xml-cdata: #d4a96a;
+    --xml-pi: #888;
+    --xml-text: #e8e8e8;
+    --xml-decl: #888;
+    --xml-error-bg: rgba(200, 50, 50, 0.12);
+    --xml-error-fg: #f07070;
+    --xml-caret: #f07070;
+    --xml-ln: #3a3a3a;
+
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  /* ── Two-pane layout ─────────────────────────────────────────────────────── */
+  .xf-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .xf-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .xf-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .xf-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Shared action button ────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* ── Input pane ──────────────────────────────────────────────────────────── */
+  .xf-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .xf-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .xf-textarea::placeholder {
+    color: var(--xml-ln);
+  }
+
+  /* ── Hidden file input ───────────────────────────────────────────────────── */
+  #xf-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ── Output pane ─────────────────────────────────────────────────────────── */
+  .xf-output {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  :global(.xf-placeholder) {
+    display: block;
+    padding: 0.75rem 1rem 0.75rem 0.75rem;
+    color: var(--xml-ln);
+    font-size: 0.8rem;
+  }
+
+  /* ── All output content is injected via innerHTML at runtime ── */
+  :global(.xf-pre) {
+    margin: 0;
+    padding: 0.5rem 0 0.5rem 0.5rem;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+  }
+
+  :global(.xf-pre > div) {
+    display: flex;
+    min-height: 1.6em;
+  }
+
+  :global(.xf-ln) {
+    display: inline-block;
+    width: 3.5rem;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border);
+    color: var(--xml-ln);
+    user-select: none;
+    font-size: 0.75rem;
+  }
+
+  :global(.xf-lc) {
+    flex: 1;
+    padding-left: 0.75rem;
+    padding-right: 1rem;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  :global(.xf-line--error) {
+    background: var(--xml-error-bg);
+  }
+
+  :global(.xf-line--caret .xf-lc) {
+    color: var(--xml-caret);
+    white-space: pre;
+  }
+
+  :global(.xf-caret) {
+    color: var(--xml-caret);
+    font-weight: bold;
+  }
+
+  :global(.xf-error-msg) {
+    color: var(--xml-error-fg);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Syntax highlighting ─────────────────────────────────────────────────── */
+  :global(.xml-tag) {
+    color: var(--xml-tag);
+    font-weight: 600;
+  }
+
+  :global(.xml-attr-name) {
+    color: var(--xml-attr-name);
+  }
+
+  :global(.xml-attr-value) {
+    color: var(--xml-attr-value);
+  }
+
+  :global(.xml-comment) {
+    color: var(--xml-comment);
+    font-style: italic;
+  }
+
+  :global(.xml-cdata) {
+    color: var(--xml-cdata);
+  }
+
+  :global(.xml-pi),
+  :global(.xml-decl) {
+    color: var(--xml-pi);
+  }
+
+  :global(.xml-pi-target) {
+    color: var(--xml-tag);
+  }
+
+  :global(.xml-text) {
+    color: var(--xml-text);
+  }
+
+  /* ── Mobile: stack panes vertically ─────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .xf-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .xf-pane {
+      height: 300px;
+    }
+  }
+</style>

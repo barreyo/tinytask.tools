@@ -9,6 +9,23 @@
     <div id="theme-btns" class="theme-btns"></div>
   </div>
 
+  <!-- AI prompt row (shown only when AI theme is active) -->
+  <div id="ai-prompt-row" class="ai-prompt-row" hidden>
+    <span class="section-label">prompt</span>
+    <div class="ai-prompt-inner">
+      <input
+        id="ai-topic-input"
+        class="ai-topic-input"
+        type="text"
+        placeholder="e.g. pirate captain pitch deck, medieval bard, nature doc narrator…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="AI topic or style"
+      />
+      <div id="ai-presets" class="ai-presets"></div>
+    </div>
+  </div>
+
   <!-- Format + count row -->
   <div class="options-row">
     <div class="format-selector" role="group" aria-label="Format">
@@ -61,6 +78,21 @@
     type Format,
   } from '../../lib/dummy-text';
 
+  // ── Window.ai type augmentation ───────────────────────────────────────────
+  declare global {
+    interface Window {
+      ai?: {
+        languageModel?: {
+          capabilities(): Promise<{ available: 'readily' | 'after-download' | 'no' }>;
+          create(options?: { systemPrompt?: string }): Promise<{
+            prompt(text: string): Promise<string>;
+            destroy(): void;
+          }>;
+        };
+      };
+    }
+  }
+
   // ── Element refs ──────────────────────────────────────────────────────────────
   const themeBtnsEl = document.getElementById('theme-btns') as HTMLDivElement;
   const formatBtnsEl = document.getElementById('format-btns') as HTMLDivElement;
@@ -73,16 +105,41 @@
   const outputEl = document.getElementById('dt-output') as HTMLDivElement;
   const outputEmpty = document.getElementById('output-empty') as HTMLParagraphElement;
   const charCount = document.getElementById('char-count') as HTMLSpanElement;
+  const aiPromptRow = document.getElementById('ai-prompt-row') as HTMLDivElement;
+  const aiTopicInput = document.getElementById('ai-topic-input') as HTMLInputElement;
+  const aiPresetsEl = document.getElementById('ai-presets') as HTMLDivElement;
 
   // ── State ─────────────────────────────────────────────────────────────────────
-  let currentTheme: Theme = 'lorem';
+  let currentTheme: Theme | 'ai' = 'lorem';
   let currentFormat: Format = 'paragraphs';
+  let aiAvailable = false;
 
   const FORMATS: Array<{ id: Format; label: string }> = [
     { id: 'paragraphs', label: 'paragraphs' },
     { id: 'sentences', label: 'sentences' },
     { id: 'words', label: 'words' },
     { id: 'headlines', label: 'headlines' },
+  ];
+
+  const AI_PRESETS = [
+    { label: 'pirate pitch deck', prompt: 'pirate captain writing a startup pitch deck' },
+    {
+      label: 'nature doc office',
+      prompt: 'nature documentary narrator describing mundane office life',
+    },
+    {
+      label: 'shakespeare code',
+      prompt: 'Shakespearean monologue about software engineering and debugging',
+    },
+    { label: 'medieval startup', prompt: 'medieval bard describing a SaaS product launch' },
+    {
+      label: 'noir detective API',
+      prompt: 'film noir detective solving mysteries in an API response',
+    },
+    {
+      label: '90s internet',
+      prompt: '90s dial-up internet enthusiast explaining modern cloud infrastructure',
+    },
   ];
 
   // ── Render theme buttons ──────────────────────────────────────────────────────
@@ -96,12 +153,52 @@
     themeBtnsEl.appendChild(btn);
   });
 
-  function setTheme(id: Theme): void {
+  function setTheme(id: Theme | 'ai'): void {
     currentTheme = id;
     themeBtnsEl.querySelectorAll<HTMLButtonElement>('.type-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.theme === id);
     });
+    aiPromptRow.hidden = id !== 'ai';
   }
+
+  // ── AI theme button (injected if available) ───────────────────────────────────
+  async function initAi(): Promise<void> {
+    if (!window.ai?.languageModel) return;
+
+    try {
+      const caps = await window.ai.languageModel.capabilities();
+      if (caps.available === 'no') return;
+
+      aiAvailable = true;
+
+      const aiBtn = document.createElement('button');
+      aiBtn.className = 'type-btn type-btn--ai';
+      aiBtn.dataset.theme = 'ai';
+      aiBtn.textContent = '✦ AI';
+      aiBtn.title = "Generate text using the browser's built-in Gemini Nano model";
+      if (caps.available === 'after-download') {
+        aiBtn.title += ' (model will download on first use)';
+      }
+      aiBtn.addEventListener('click', () => setTheme('ai'));
+      themeBtnsEl.appendChild(aiBtn);
+
+      // Render preset chips
+      AI_PRESETS.forEach((preset) => {
+        const chip = document.createElement('button');
+        chip.className = 'ai-preset-chip';
+        chip.textContent = preset.label;
+        chip.addEventListener('click', () => {
+          aiTopicInput.value = preset.prompt;
+          aiTopicInput.focus();
+        });
+        aiPresetsEl.appendChild(chip);
+      });
+    } catch {
+      // Silently ignore — AI is a progressive enhancement
+    }
+  }
+
+  initAi();
 
   // ── Render format buttons ─────────────────────────────────────────────────────
   FORMATS.forEach((f) => {
@@ -139,15 +236,8 @@
     countInput.value = String(Math.min(limits.max, getCount() + 1));
   });
 
-  // ── Generate ──────────────────────────────────────────────────────────────────
-  function doGenerate(seed?: number): void {
-    const text = generate({
-      theme: currentTheme,
-      format: currentFormat,
-      count: getCount(),
-      seed,
-    });
-
+  // ── Render output ─────────────────────────────────────────────────────────────
+  function renderText(text: string): void {
     outputEmpty.hidden = true;
     outputEl.innerHTML = '';
 
@@ -173,6 +263,78 @@
     }
 
     charCount.textContent = `${text.length.toLocaleString()} chars`;
+  }
+
+  // ── AI generation ─────────────────────────────────────────────────────────────
+  async function doGenerateAi(): Promise<void> {
+    if (!window.ai?.languageModel) {
+      doGenerate();
+      return;
+    }
+
+    const topic = aiTopicInput.value.trim();
+    const count = getCount();
+    const formatLabel = currentFormat;
+
+    const systemPrompt =
+      'You are a creative placeholder text generator. Respond ONLY with the requested text — no preamble, no explanation, no metadata. Produce natural, varied, engaging text.';
+
+    const userPrompt = topic
+      ? `Generate exactly ${count} ${formatLabel} of placeholder text written in the style of: ${topic}. Output only the text.`
+      : `Generate exactly ${count} ${formatLabel} of creative, unexpected placeholder text. Pick any unusual, fun, or distinctive voice or style. Output only the text.`;
+
+    generateBtn.disabled = true;
+    regenerateBtn.disabled = true;
+    outputEmpty.hidden = true;
+    outputEl.innerHTML = '';
+    charCount.textContent = '';
+
+    const loadingEl = document.createElement('p');
+    loadingEl.className = 'output-para ai-loading';
+    loadingEl.textContent = '✦ generating…';
+    outputEl.appendChild(loadingEl);
+
+    let session: { prompt(t: string): Promise<string>; destroy(): void } | null = null;
+
+    try {
+      session = await window.ai.languageModel.create({ systemPrompt });
+      const result = await session.prompt(userPrompt);
+      renderText(result.trim());
+    } catch {
+      // Fallback to word-bank generation
+      outputEl.innerHTML = '';
+      const fallbackThemes: Theme[] = ['lorem', 'fintech', 'startup', 'developer'];
+      const fallbackTheme = fallbackThemes[Math.floor(Math.random() * fallbackThemes.length)];
+      const text = generate({ theme: fallbackTheme, format: currentFormat, count: getCount() });
+      renderText(text);
+
+      const notice = document.createElement('p');
+      notice.className = 'ai-fallback-notice';
+      notice.textContent = '⚠ AI generation failed — showing word-bank text instead.';
+      outputEl.prepend(notice);
+    } finally {
+      session?.destroy();
+      generateBtn.disabled = false;
+      regenerateBtn.disabled = false;
+    }
+  }
+
+  // ── Generate ──────────────────────────────────────────────────────────────────
+  function doGenerate(seed?: number): void {
+    if (currentTheme === 'ai' && aiAvailable) {
+      doGenerateAi();
+      return;
+    }
+
+    const theme: Theme = currentTheme === 'ai' ? 'lorem' : currentTheme;
+    const text = generate({
+      theme,
+      format: currentFormat,
+      count: getCount(),
+      seed,
+    });
+
+    renderText(text);
   }
 
   generateBtn.addEventListener('click', () => doGenerate());
@@ -221,6 +383,70 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
+  }
+
+  /* ── AI prompt row ────────────────────────────────────────────────────────────── */
+  .ai-prompt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .ai-prompt-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ai-topic-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .ai-topic-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .ai-topic-input::placeholder {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+  }
+
+  .ai-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  /* :global because chips are created dynamically in JS */
+  :global(.ai-preset-chip) {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  :global(.ai-preset-chip:hover) {
+    border-color: var(--border-active);
+    color: var(--fg);
   }
 
   /* ── Options row ─────────────────────────────────────────────────────────────── */
@@ -272,6 +498,14 @@
     border-color: var(--fg);
     background: var(--fg);
     color: var(--bg);
+  }
+
+  :global(.type-btn--ai) {
+    border-style: dashed;
+  }
+
+  :global(.type-btn--ai.active) {
+    border-style: solid;
   }
 
   /* ── Count control ───────────────────────────────────────────────────────────── */
@@ -351,9 +585,14 @@
     white-space: nowrap;
   }
 
-  .action-btn:hover {
+  .action-btn:hover:not(:disabled) {
     border-color: var(--border-active);
     color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .action-btn.primary {
@@ -361,7 +600,7 @@
     color: var(--fg);
   }
 
-  .action-btn.primary:hover {
+  .action-btn.primary:hover:not(:disabled) {
     border-color: var(--border-active);
   }
 
@@ -424,6 +663,31 @@
     margin-bottom: 0;
   }
 
+  :global(.ai-loading) {
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    animation: ai-pulse 1.2s ease-in-out infinite;
+  }
+
+  :global(.ai-fallback-notice) {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    margin: 0 0 0.75rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+  }
+
+  @keyframes ai-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
   /* ── Mobile ──────────────────────────────────────────────────────────────────── */
   @media (max-width: 640px) {
     .options-row {
@@ -433,6 +697,10 @@
     }
 
     .theme-selector {
+      flex-direction: column;
+    }
+
+    .ai-prompt-row {
       flex-direction: column;
     }
   }

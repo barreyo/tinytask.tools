@@ -257,6 +257,62 @@ export const tools: Tool[] = [
     ],
   },
   {
+    slug: 'toml-formatter',
+    name: 'TOML Formatter',
+    description:
+      'Prettify and validate TOML config files in the browser — syntax-highlighted output with line numbers and precise error locations.',
+    metaDescription:
+      'Free online TOML formatter and validator — prettify TOML with syntax highlighting for keys, strings, headers, dates, and comments. Detect parse errors with line numbers. 100% client-side.',
+    tags: ['toml', 'format', 'validate', 'config'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What does the TOML Formatter do?',
+        a: 'It parses your TOML using the smol-toml library, re-serialises it with consistent formatting, and applies syntax highlighting for section headers, keys, strings, numbers, booleans, dates, and comments. If the TOML is invalid it reports the error with a line number.',
+      },
+      {
+        q: 'What is TOML?',
+        a: "TOML (Tom's Obvious, Minimal Language) is a configuration file format designed to be easy to read due to obvious semantics. It is used by Cargo (Rust), pyproject.toml (Python), and many other tools. It maps unambiguously to a hash table.",
+      },
+      {
+        q: 'What TOML features are supported?',
+        a: 'All TOML v1.0 features: standard tables, array of tables, inline tables, inline arrays, dotted keys, quoted keys, multi-line strings, all number types (integer, float, hex, octal, binary), booleans, and all date/time types.',
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All parsing and formatting happens in your browser using the smol-toml library. Nothing is transmitted.',
+      },
+    ],
+  },
+  {
+    slug: 'toml-json',
+    name: 'TOML ↔ JSON Converter',
+    description:
+      'Convert between TOML and JSON instantly in the browser — auto-detects direction from input.',
+    metaDescription:
+      'Free online TOML to JSON converter (and JSON to TOML) — paste either format and convert instantly. Auto-detects direction. Runs entirely in your browser.',
+    tags: ['toml', 'json', 'convert', 'config'],
+    implemented: true,
+    faq: [
+      {
+        q: 'How does direction auto-detection work?',
+        a: 'If the input starts with { or [ it is treated as JSON and converted to TOML. Anything else is treated as TOML and converted to JSON. Use the swap ⇄ button to force a specific direction or to round-trip the output back.',
+      },
+      {
+        q: 'Are there data types that cannot survive a round-trip?',
+        a: 'TOML has native date, datetime, and time types that JSON does not. When converting TOML to JSON these become strings. Converting back to TOML will produce strings rather than native TOML date types. JSON null values are also not supported in TOML and will cause a conversion error.',
+      },
+      {
+        q: 'What happens with TOML array-of-tables ([[table]])?',
+        a: "Array-of-tables sections become JSON arrays of objects. The round-trip is lossless for data — the TOML output format may differ from the original (using inline or block style based on smol-toml's serialiser) but the data is identical.",
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All parsing and conversion runs in your browser using the smol-toml library. Nothing is transmitted.',
+      },
+    ],
+  },
+  {
     slug: 'yaml-json',
     name: 'YAML ↔ JSON Converter',
     description: 'Convert between YAML and JSON instantly in the browser.',
@@ -576,6 +632,130 @@ export const tools: Tool[] = [
       {
         q: 'Will styled or rounded QR codes scan reliably?',
         a: 'Yes — modern smartphone cameras and QR scanner apps handle rounded dots, classy shapes, and colour-filled codes well. For maximum compatibility keep sufficient contrast between the dot colour and the background, and avoid extremely light dot colours on white backgrounds.',
+      },
+    ],
+  },
+  {
+    slug: 'xml-formatter',
+    name: 'XML Formatter',
+    description:
+      'Prettify and validate XML in the browser — syntax-highlighted output with line numbers and precise error locations.',
+    metaDescription:
+      'Free online XML formatter and validator — prettify XML with syntax highlighting, detect errors with line and column numbers. 100% client-side, no data sent to any server.',
+    tags: ['xml', 'format', 'validate'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What does the XML Formatter do?',
+        a: "It parses your XML using the browser's native DOMParser, re-serialises it with consistent 2-space indentation, and applies syntax highlighting for tags, attributes, comments, and CDATA sections. If the XML is invalid it reports the error with line and column numbers.",
+      },
+      {
+        q: 'Which XML features are supported?',
+        a: 'The formatter handles standard elements and attributes, comments, CDATA sections, processing instructions, and the XML declaration. Namespace prefixes and DTD declarations are preserved as-is.',
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All parsing and formatting happens in your browser using the built-in DOMParser API (powered by a Rust-based parser in Chrome 147+). Nothing is transmitted.',
+      },
+      {
+        q: 'What file types can I upload?',
+        a: 'Any XML-based file: .xml, .xsd (XML Schema), .xsl/.xslt (stylesheets), .svg, or plain .txt containing XML.',
+      },
+    ],
+  },
+  {
+    slug: 'color-picker',
+    name: 'Color Picker',
+    description:
+      'Pick any color from your screen with the EyeDropper API and instantly see hex, RGB, HSL, HSV, HWB, CMYK, LCH, oklch, display-P3, and more — all one-click to copy.',
+    metaDescription:
+      'Free online color picker — use the EyeDropper API to sample any color from your screen and get hex, RGB, HSL, HSV, HWB, CMYK, LCH, oklch, display-P3, WCAG contrast ratios, and more. Runs in your browser.',
+    tags: ['color', 'design', 'css', 'hex', 'rgb', 'hsl', 'eyedropper'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is the EyeDropper API?',
+        a: 'The EyeDropper API (Chrome 95+, Edge 95+) lets a web page ask the browser to enter a screen color sampling mode. The user can click any pixel on their screen — including outside the browser window — and the API returns the sRGB hex value of that pixel.',
+      },
+      {
+        q: 'What color formats are shown?',
+        a: 'The tool shows 15+ formats across four groups. CSS/Web: hex (lower and upper), rgb(), hsl(), hwb(), and CSS named color if applicable. Design tools: HSV/HSB and CMYK. Modern CSS: oklch(), lch(), and display-P3 color(). Other: 24-bit integer and normalized float vec3 (for GLSL shaders). It also shows WCAG 2.1 contrast ratios against white and black.',
+      },
+      {
+        q: 'What is the difference between LCH and oklch?',
+        a: 'Both are perceptually uniform color spaces where equal numeric differences correspond to equal perceived differences. LCH is based on the CIE L*a*b* space (D50 reference white) and is widely used in print. oklch is a newer space by Björn Ottosson built on the OKLab model, which is better at predicting perceived hue uniformity and is now a first-class CSS color function in modern browsers.',
+      },
+      {
+        q: 'What is display-P3?',
+        a: 'display-P3 is a wide-gamut color space used by modern displays (Apple devices since 2016, most newer monitors). It can represent about 25% more colors than sRGB, particularly more vivid greens and reds. CSS supports it via color(display-p3 r g b). Colors within the sRGB gamut have P3 values between 0 and 1; out-of-gamut sRGB colors may have values slightly outside this range.',
+      },
+      {
+        q: 'What do the contrast ratio ratings mean?',
+        a: 'WCAG 2.1 defines contrast ratio thresholds for text accessibility. AA requires 4.5:1 for normal text (3:1 for large text). AAA requires 7:1 (4.5:1 for large text). A "fail" rating means the color combination does not meet the minimum 3:1 threshold and should not be used for text.',
+      },
+    ],
+  },
+  {
+    slug: 'compression-tester',
+    name: 'Gzip / Brotli Tester',
+    description:
+      'Paste any text payload and instantly see its compressed size across gzip, deflate, deflate-raw, and brotli — entirely in the browser.',
+    metaDescription:
+      'Free online compression tester — see how small your JSON, HTML, or API payload would be after gzip, deflate, or brotli compression. Runs entirely in the browser using the Compression Streams API.',
+    tags: ['compression', 'gzip', 'brotli', 'deflate', 'performance', 'api'],
+    implemented: true,
+    faq: [
+      {
+        q: 'How does this tool compress data without a server?',
+        a: "It uses the browser's native Compression Streams API (available in Chrome 80+, Firefox 113+, Safari 16.4+), the same API used by the browser itself for network compression. No data leaves your device.",
+      },
+      {
+        q: 'What is the difference between gzip and deflate?',
+        a: 'Both use the DEFLATE compression algorithm internally. gzip wraps it with a header, checksum, and trailer (RFC 1952) — this is the format servers send in HTTP responses with Content-Encoding: gzip. The "deflate (zlib)" format adds a zlib wrapper (RFC 1950). "deflate-raw" is raw DEFLATE with no wrapper. In practice, HTTP clients expect gzip or brotli.',
+      },
+      {
+        q: 'What is brotli and why does it produce smaller files?',
+        a: 'Brotli (br) is a modern compression algorithm by Google optimised for text. It uses a combination of a modern variant of LZ77, Huffman coding, and a large static dictionary of common web content. It typically achieves 15–25% better compression than gzip on JSON and HTML.',
+      },
+      {
+        q: 'Why does compressing short strings sometimes make them larger?',
+        a: 'Compression algorithms include metadata headers and checksum bytes. For very short payloads (under ~50 bytes), the overhead of these headers exceeds the size savings from compressing the content itself. Compression only helps beyond a few hundred bytes.',
+      },
+      {
+        q: 'Which algorithm should my API use?',
+        a: 'Prefer brotli (br) when both client and server support it — it gives the best compression ratio. Fall back to gzip as it is universally supported. Set the Content-Encoding header on responses and Accept-Encoding on requests to negotiate the format.',
+      },
+    ],
+  },
+  {
+    slug: 'passkey-inspector',
+    name: 'Passkey Payload Inspector',
+    description:
+      'Decode and inspect WebAuthn / passkey payloads — AAGUID lookup, attestation object decoder, clientDataJSON parser, and a live Passkey Playground.',
+    metaDescription:
+      'Free online passkey / WebAuthn inspector — look up AAGUIDs, decode attestation objects and clientDataJSON, inspect authData flags and COSE keys. Runs entirely in your browser.',
+    tags: ['passkey', 'webauthn', 'fido', 'auth', 'security', 'decode'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is a passkey?',
+        a: "A passkey is a phishing-resistant credential based on the FIDO2 / WebAuthn standard. Instead of a password, the user's device generates a public/private key pair. The private key never leaves the device; the server stores only the public key. Authentication is done by signing a server-issued challenge with the private key.",
+      },
+      {
+        q: 'What is an AAGUID?',
+        a: 'The Authenticator Attestation GUID (AAGUID) is a 128-bit identifier embedded in a credential\'s attestation data that identifies the make and model of the authenticator (e.g. "iPhone Touch ID", "YubiKey 5 NFC", "Windows Hello"). It is used by relying parties to enforce authenticator policy.',
+      },
+      {
+        q: 'What do the authData flags mean?',
+        a: 'UP (User Present): the user physically interacted with the authenticator. UV (User Verified): the authenticator performed local user verification (PIN, biometric). BE (Backup Eligible): the credential can be synced. BS (Backed Up): the credential is currently backed up. AT: attestedCredentialData is present. ED: extension data is present.',
+      },
+      {
+        q: 'Why does "Invalid Origin" cause authentication failures?',
+        a: "The origin embedded in clientDataJSON must exactly match the origin the server expects. A mismatch (e.g. http vs https, or a different port) causes the server's clientDataJSON verification to fail. The ClientDataJSON tab lets you inspect the exact origin that was captured during credential creation or assertion.",
+      },
+      {
+        q: 'Is my credential data sent anywhere?',
+        a: 'No. All decoding — Base64URL, CBOR, binary parsing — happens locally in your browser. No credential data, keys, or tokens are transmitted to any server.',
       },
     ],
   },

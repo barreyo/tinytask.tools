@@ -17,7 +17,11 @@ const tagsStr = (tool.tags ?? []).join(',');
   data-tags={tagsStr}
   style={prideColor ? `--pride-hover: ${prideColor}` : undefined}
 >
-  <a href={`/tools/${tool.slug}`} class="tool-card">
+  <a
+    href={`/tools/${tool.slug}`}
+    class="tool-card"
+    style={`view-transition-name: tool-card-${tool.slug}`}
+  >
     <h2 class="tool-name">{tool.name}</h2>
     <p class="tool-desc">{tool.description}</p>
     <div class="tool-tags" hidden></div>
@@ -55,7 +59,8 @@ const tagsStr = (tool.tags ?? []).join(',');
     height: 100%;
   }
 
-  .tool-card:hover {
+  .tool-card:hover,
+  .tool-card-wrapper[data-selected] .tool-card {
     border-color: var(--pride-hover, var(--border-active));
   }
 

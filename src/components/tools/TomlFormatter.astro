@@ -1,0 +1,430 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="tf-tool">
+  <!-- Input pane -->
+  <div class="tf-pane tf-pane--input">
+    <div class="tf-pane-header">
+      <span class="tf-pane-label">input</span>
+      <div class="tf-pane-actions">
+        <button id="tf-upload-btn" class="action-btn" aria-label="Upload TOML file">upload</button>
+        <input
+          id="tf-file-input"
+          type="file"
+          accept=".toml,.txt"
+          aria-hidden="true"
+          tabindex="-1"
+        />
+        <button id="tf-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="tf-editor-wrap">
+      <textarea
+        id="tf-input"
+        class="tf-textarea"
+        placeholder="Paste TOML here…"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="TOML input"></textarea>
+    </div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="tf-pane tf-pane--output">
+    <div class="tf-pane-header">
+      <span class="tf-pane-label">output</span>
+      <div class="tf-pane-actions">
+        <button
+          id="tf-copy-btn"
+          class="action-btn"
+          disabled
+          aria-label="Copy formatted TOML to clipboard">copy</button
+        >
+        <button
+          id="tf-download-btn"
+          class="action-btn"
+          disabled
+          aria-label="Download formatted TOML as file">download</button
+        >
+      </div>
+    </div>
+    <div id="tf-output" class="tf-output" aria-live="polite" aria-label="Formatted TOML output">
+      <span class="tf-placeholder">formatted output will appear here</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { formatToml, highlightToml } from '../../lib/toml';
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('tf-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('tf-output') as HTMLDivElement;
+  const uploadBtn = document.getElementById('tf-upload-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('tf-file-input') as HTMLInputElement;
+  const clearBtn = document.getElementById('tf-clear-btn') as HTMLButtonElement;
+  const copyBtn = document.getElementById('tf-copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('tf-download-btn') as HTMLButtonElement;
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let formattedToml = '';
+
+  // ── Main format function ─────────────────────────────────────────────────────
+  function process() {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      formattedToml = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      outputEl.innerHTML = '<span class="tf-placeholder">formatted output will appear here</span>';
+      return;
+    }
+
+    try {
+      formattedToml = formatToml(src);
+      const highlighted = highlightToml(formattedToml);
+
+      const lines = highlighted.split('\n');
+      const rows = lines.map((line, i) => {
+        const lineNum = `<span class="tf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+        return `<div>${lineNum}<span class="tf-lc">${line || '\u00a0'}</span></div>`;
+      });
+
+      outputEl.innerHTML = `<pre class="tf-pre">${rows.join('')}</pre>`;
+      outputEl.classList.remove('tf-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } catch (err) {
+      formattedToml = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+
+      const message = (err as Error).message ?? 'Unknown parse error';
+
+      // smol-toml error messages include line/col: "Parse error on line N, col M: ..."
+      const lineColMatch = message.match(/line\s+(\d+)/i);
+      const errLineNum = lineColMatch ? parseInt(lineColMatch[1], 10) - 1 : null;
+
+      const srcLines = src.split('\n');
+
+      if (errLineNum !== null && errLineNum >= 0 && errLineNum < srcLines.length) {
+        const rows: string[] = srcLines.map((rawLine, i) => {
+          const isError = i === errLineNum;
+          const rowClass = isError ? ' class="tf-line--error"' : '';
+          const lineNum = `<span class="tf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
+          const lineContent = `<span class="tf-lc">${escapeHtml(rawLine) || '\u00a0'}</span>`;
+          let row = `<div${rowClass}>${lineNum}${lineContent}</div>`;
+
+          if (isError) {
+            const caretRow = `<div class="tf-line--caret"><span class="tf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="tf-lc"><span class="tf-caret">^</span></span></div>`;
+            const msgRow = `<div class="tf-line--msg"><span class="tf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="tf-lc tf-error-msg">${escapeHtml(message)}</span></div>`;
+            row += caretRow + msgRow;
+          }
+
+          return row;
+        });
+
+        outputEl.innerHTML = `<pre class="tf-pre">${rows.join('')}</pre>`;
+        const errorLineEl = outputEl.querySelector('.tf-line--error');
+        errorLineEl?.scrollIntoView({ block: 'nearest' });
+      } else {
+        outputEl.innerHTML = `<pre class="tf-pre"><div class="tf-line--msg"><span class="tf-lc tf-error-msg">${escapeHtml(message)}</span></div></pre>`;
+      }
+
+      outputEl.classList.add('tf-output--error');
+    }
+  }
+
+  // ── Debounce ─────────────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  function debouncedProcess() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  uploadBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      inputEl.value = (e.target?.result as string) ?? '';
+      process();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!formattedToml) return;
+    await navigator.clipboard.writeText(formattedToml);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!formattedToml) return;
+    const blob = new Blob([formattedToml], { type: 'application/toml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'formatted.toml';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  inputEl.addEventListener('input', debouncedProcess);
+</script>
+
+<style>
+  /* ── Tool design tokens ──────────────────────────────────────────────────── */
+  .tf-tool {
+    --toml-header: #c8b4f0;
+    --toml-key: #c8b4f0;
+    --toml-string: #7ec8a0;
+    --toml-number: #d4a96a;
+    --toml-bool: #7aabcc;
+    --toml-date: #56c9c9;
+    --toml-comment: #555;
+    --toml-error-bg: rgba(200, 50, 50, 0.12);
+    --toml-error-fg: #f07070;
+    --toml-caret: #f07070;
+    --toml-ln: #3a3a3a;
+
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  /* ── Two-pane layout ─────────────────────────────────────────────────────── */
+  .tf-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .tf-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tf-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .tf-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* ── Input pane ──────────────────────────────────────────────────────────── */
+  .tf-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .tf-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .tf-textarea::placeholder {
+    color: var(--toml-ln);
+  }
+
+  /* ── Hidden file input ───────────────────────────────────────────────────── */
+  #tf-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ── Output pane ─────────────────────────────────────────────────────────── */
+  .tf-output {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  :global(.tf-placeholder) {
+    display: block;
+    padding: 0.75rem 1rem 0.75rem 0.75rem;
+    color: var(--toml-ln);
+    font-size: 0.8rem;
+  }
+
+  :global(.tf-pre) {
+    margin: 0;
+    padding: 0.5rem 0 0.5rem 0.5rem;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+  }
+
+  :global(.tf-pre > div) {
+    display: flex;
+    min-height: 1.6em;
+  }
+
+  :global(.tf-ln) {
+    display: inline-block;
+    width: 3.5rem;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border);
+    color: var(--toml-ln);
+    user-select: none;
+    font-size: 0.75rem;
+  }
+
+  :global(.tf-lc) {
+    flex: 1;
+    padding-left: 0.75rem;
+    padding-right: 1rem;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  :global(.tf-line--error) {
+    background: var(--toml-error-bg);
+  }
+
+  :global(.tf-line--caret .tf-lc) {
+    color: var(--toml-caret);
+    white-space: pre;
+  }
+
+  :global(.tf-caret) {
+    color: var(--toml-caret);
+    font-weight: bold;
+  }
+
+  :global(.tf-error-msg) {
+    color: var(--toml-error-fg);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Syntax highlighting ─────────────────────────────────────────────────── */
+  :global(.toml-header) {
+    color: var(--toml-header);
+    font-weight: 600;
+  }
+
+  :global(.toml-key) {
+    color: var(--toml-key);
+    font-weight: 600;
+  }
+
+  :global(.toml-string) {
+    color: var(--toml-string);
+  }
+
+  :global(.toml-number) {
+    color: var(--toml-number);
+  }
+
+  :global(.toml-bool) {
+    color: var(--toml-bool);
+  }
+
+  :global(.toml-date) {
+    color: var(--toml-date);
+  }
+
+  :global(.toml-comment) {
+    color: var(--toml-comment);
+    font-style: italic;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .tf-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .tf-pane {
+      height: 300px;
+    }
+  }
+</style>

@@ -49,6 +49,10 @@ const { totalCount } = Astro.props;
         document.removeEventListener('keydown', window.__searchKeydownHandler);
         window.__searchKeydownHandler = undefined;
       }
+      if (window.__searchOutsideClickHandler) {
+        document.removeEventListener('mousedown', window.__searchOutsideClickHandler);
+        window.__searchOutsideClickHandler = undefined;
+      }
       return;
     }
 
@@ -67,11 +71,22 @@ const { totalCount } = Astro.props;
       backdrop.classList.remove('is-open');
       panel.setAttribute('aria-hidden', 'true');
       input.value = '';
-      runSearch('');
+      setSelected(-1);
       history.replaceState(null, '', window.location.pathname);
+      // Defer DOM reset so any pending click event still fires on the correct
+      // element. Calling runSearch('') immediately replaces innerHTML (removing
+      // fuzzy-match <mark> nodes), which can orphan the mousedown target and
+      // prevent the browser from firing the subsequent click event.
+      setTimeout(() => runSearch(''), 0);
     }
 
-    backdrop.addEventListener('click', closeSearch);
+    // Close when clicking outside the panel. Using mousedown so the subsequent
+    // click event still reaches tool card links and triggers navigation.
+    function handleOutsideClick(e) {
+      if (panel.classList.contains('is-open') && !panel.contains(e.target)) {
+        closeSearch();
+      }
+    }
 
     // ── Fuzzy (subsequence) match — names only ───────────────────────────────
 
@@ -203,6 +218,36 @@ const { totalCount } = Astro.props;
       return visibleCount;
     }
 
+    // ── Keyboard selection ────────────────────────────────────────────────────
+
+    let selectedIndex = -1;
+
+    function getVisibleCards() {
+      return Array.from(grid.querySelectorAll('.tool-card-wrapper:not([data-hidden])')).sort(
+        (a, b) => {
+          const aOrder = a.style.order !== '' ? parseInt(a.style.order) : Infinity;
+          const bOrder = b.style.order !== '' ? parseInt(b.style.order) : Infinity;
+          return aOrder - bOrder;
+        },
+      );
+    }
+
+    function getColumnCount() {
+      return getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+    }
+
+    function setSelected(index) {
+      const cards = getVisibleCards();
+      cards.forEach((c) => c.removeAttribute('data-selected'));
+      if (index < 0 || index >= cards.length) {
+        selectedIndex = -1;
+        return;
+      }
+      selectedIndex = index;
+      cards[index].setAttribute('data-selected', '');
+      cards[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
     // ── Initialise from URL param ─────────────────────────────────────────────
 
     const params = new URLSearchParams(window.location.search);
@@ -216,6 +261,7 @@ const { totalCount } = Astro.props;
     // ── Input handlers ───────────────────────────────────────────────────────
 
     input.addEventListener('input', () => {
+      selectedIndex = -1;
       runSearch(input.value);
       const url = new URL(window.location.href);
       if (input.value.trim()) {
@@ -227,12 +273,41 @@ const { totalCount } = Astro.props;
     });
 
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const visible = Array.from(
-          grid.querySelectorAll('.tool-card-wrapper:not([data-hidden]) a'),
-        );
-        if (visible.length === 1) visible[0].click();
+      const cards = getVisibleCards();
+      const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+
+      if (isArrow) {
+        e.preventDefault();
+        // On first arrow press with nothing selected, always start at index 0
+        const cols = getColumnCount();
+        const cur = selectedIndex < 0 ? -1 : selectedIndex;
+
+        let next;
+        if (e.key === 'ArrowRight') {
+          next = cur < cards.length - 1 ? cur + 1 : 0;
+        } else if (e.key === 'ArrowLeft') {
+          next = cur > 0 ? cur - 1 : cards.length - 1;
+        } else if (e.key === 'ArrowDown') {
+          next = cur < 0 ? 0 : Math.min(cards.length - 1, cur + cols);
+        } else {
+          // ArrowUp
+          next = cur < 0 ? 0 : Math.max(0, cur - cols);
+        }
+        setSelected(next);
+        return;
       }
+
+      if (e.key === 'Enter') {
+        if (selectedIndex >= 0 && selectedIndex < cards.length) {
+          const link = cards[selectedIndex].querySelector('a');
+          if (link) link.click();
+        } else if (cards.length === 1) {
+          const link = cards[0].querySelector('a');
+          if (link) link.click();
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         closeSearch();
       }
@@ -257,10 +332,15 @@ const { totalCount } = Astro.props;
       }
     }
 
-    // Remove stale listener from prior navigation, then re-add
+    // Remove stale listeners from prior navigation, then re-add
     document.removeEventListener('keydown', window.__searchKeydownHandler);
+    if (window.__searchOutsideClickHandler) {
+      document.removeEventListener('mousedown', window.__searchOutsideClickHandler);
+    }
     window.__searchKeydownHandler = handleSearchKeydown;
+    window.__searchOutsideClickHandler = handleOutsideClick;
     document.addEventListener('keydown', handleSearchKeydown);
+    document.addEventListener('mousedown', handleOutsideClick);
   } // end initSearch
 
   document.addEventListener('astro:page-load', initSearch);
@@ -279,7 +359,6 @@ const { totalCount } = Astro.props;
   }
 
   .search-backdrop.is-open {
-    pointer-events: auto;
     opacity: 1;
   }
 

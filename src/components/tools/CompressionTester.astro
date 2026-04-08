@@ -1,0 +1,547 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="ct-tool">
+  <!-- API support notice (shown if unsupported) -->
+  <div id="ct-unsupported" class="ct-notice ct-notice--warn" hidden>
+    <strong>CompressionStream API not available</strong> — this tool requires a modern browser (Chrome
+    80+, Firefox 113+, Safari 16.4+).
+  </div>
+
+  <!-- Input pane -->
+  <div class="ct-input-section">
+    <div class="ct-input-header">
+      <span class="section-label">payload</span>
+      <div class="ct-input-actions">
+        <button id="ct-upload-btn" class="action-btn" aria-label="Upload file">upload</button>
+        <input id="ct-file-input" type="file" aria-hidden="true" tabindex="-1" />
+        <button id="ct-sample-btn" class="action-btn">sample</button>
+        <button id="ct-clear-btn" class="action-btn">clear</button>
+      </div>
+    </div>
+    <textarea
+      id="ct-input"
+      class="ct-textarea"
+      placeholder="Paste your JSON, HTML, CSS, log output, or any text payload…"
+      spellcheck="false"
+      autocomplete="off"
+      aria-label="Input payload"></textarea>
+    <div class="ct-input-footer">
+      <span id="ct-input-size" class="ct-meta"></span>
+    </div>
+  </div>
+
+  <!-- Results grid -->
+  <div id="ct-results" class="ct-results" hidden>
+    <div class="ct-results-header">
+      <span class="section-label">compression results</span>
+    </div>
+    <div id="ct-cards" class="ct-cards"></div>
+    <div class="ct-results-footer">
+      <span id="ct-best-label" class="ct-meta"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { compress, formatBytes, FORMATS } from '../../lib/compression-tester';
+
+  // ── Element refs ─────────────────────────────────────────────────────────────
+  const inputEl = document.getElementById('ct-input') as HTMLTextAreaElement;
+  const inputSizeEl = document.getElementById('ct-input-size') as HTMLSpanElement;
+  const resultsEl = document.getElementById('ct-results') as HTMLDivElement;
+  const cardsEl = document.getElementById('ct-cards') as HTMLDivElement;
+  const bestLabelEl = document.getElementById('ct-best-label') as HTMLSpanElement;
+  const unsupportedEl = document.getElementById('ct-unsupported') as HTMLDivElement;
+  const uploadBtn = document.getElementById('ct-upload-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('ct-file-input') as HTMLInputElement;
+  const sampleBtn = document.getElementById('ct-sample-btn') as HTMLButtonElement;
+  const clearBtn = document.getElementById('ct-clear-btn') as HTMLButtonElement;
+
+  // ── Sample payload ────────────────────────────────────────────────────────────
+  const SAMPLE_PAYLOAD = `{
+  "transaction_id": "txn_01HVMDZ8XC2Y7HQJZR5XWE4S6",
+  "status": "approved",
+  "amount": 12500,
+  "currency": "USD",
+  "merchant": {
+    "id": "mer_01GVFKW9JRQCJ3DQNZ29YBKTT",
+    "name": "Acme Corp",
+    "category_code": "5411",
+    "country": "US"
+  },
+  "card": {
+    "last4": "4242",
+    "network": "visa",
+    "funding": "credit",
+    "fingerprint": "fp_9z3nHXA2rK7vM5sL"
+  },
+  "customer": {
+    "id": "cus_01HVMDZ8XC2Y7HQJZR5XWE4S1",
+    "email": "john.doe@example.com",
+    "ip_address": "203.0.113.42",
+    "device_fingerprint": "df_aAbBcC123456789"
+  },
+  "risk": {
+    "score": 12,
+    "signals": [],
+    "rules_triggered": []
+  },
+  "metadata": {
+    "order_id": "ord_202404080001",
+    "product_ids": ["prod_abc", "prod_def", "prod_ghi"],
+    "notes": "Express checkout — 3DS not required below threshold"
+  },
+  "created_at": "2026-04-08T09:14:32.000Z",
+  "updated_at": "2026-04-08T09:14:32.814Z"
+}`;
+
+  // ── Check API availability ────────────────────────────────────────────────────
+  if (typeof CompressionStream === 'undefined') {
+    unsupportedEl.hidden = false;
+    inputEl.disabled = true;
+    uploadBtn.disabled = true;
+    sampleBtn.disabled = true;
+  }
+
+  // ── Debounce ──────────────────────────────────────────────────────────────────
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  let runningJob = false;
+
+  function debouncedProcess(): void {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 300);
+  }
+
+  // ── Process ───────────────────────────────────────────────────────────────────
+  async function process(): Promise<void> {
+    const text = inputEl.value;
+    const encoder = new TextEncoder();
+    const byteLen = encoder.encode(text).byteLength;
+
+    if (!text.trim()) {
+      inputSizeEl.textContent = '';
+      resultsEl.hidden = true;
+      return;
+    }
+
+    inputSizeEl.textContent = `${byteLen.toLocaleString()} bytes (UTF-8)`;
+
+    if (runningJob) return;
+    runningJob = true;
+
+    cardsEl.innerHTML = FORMATS.map(
+      (f) => `
+      <div class="ct-card ct-card--loading" data-format="${f}">
+        <div class="ct-card-label">${f === 'deflate' ? 'deflate (zlib)' : f === 'br' ? 'brotli' : f}</div>
+        <div class="ct-card-body">
+          <span class="ct-loading">…</span>
+        </div>
+      </div>
+    `,
+    ).join('');
+    resultsEl.hidden = false;
+    bestLabelEl.textContent = '';
+
+    try {
+      const summary = await compress(text);
+
+      // Render results
+      cardsEl.innerHTML = '';
+      const supported = summary.results.filter((r) => r.supported && !r.error);
+
+      summary.results.forEach((r) => {
+        const card = document.createElement('div');
+        card.className = 'ct-card';
+        if (!r.supported || r.error) {
+          card.classList.add('ct-card--unsupported');
+        }
+
+        if (!r.supported || r.error) {
+          card.innerHTML = `
+            <div class="ct-card-label">${escHtml(r.label)}</div>
+            <div class="ct-card-body">
+              <span class="ct-unsupported-msg">${escHtml(r.error ?? 'Not supported')}</span>
+            </div>
+          `;
+        } else {
+          const pct = (r.savings * 100).toFixed(1);
+          const isExpansion = r.savings < 0;
+          const pctClass = isExpansion
+            ? 'ct-pct--bad'
+            : r.savings > 0.3
+              ? 'ct-pct--great'
+              : 'ct-pct--ok';
+          const pctLabel = isExpansion
+            ? `+${(Math.abs(r.savings) * 100).toFixed(1)}% larger`
+            : `${pct}% smaller`;
+
+          card.innerHTML = `
+            <div class="ct-card-label">${escHtml(r.label)}</div>
+            <div class="ct-card-body">
+              <div class="ct-stat">
+                <span class="ct-stat-value">${escHtml(formatBytes(r.compressedBytes))}</span>
+                <span class="ct-stat-label">compressed</span>
+              </div>
+              <div class="ct-stat">
+                <span class="ct-stat-value ${pctClass}">${escHtml(pctLabel)}</span>
+                <span class="ct-stat-label">vs original</span>
+              </div>
+              <div class="ct-bar-wrap" title="${r.compressedBytes} / ${r.originalBytes} bytes">
+                <div class="ct-bar" style="width: ${Math.min(100, Math.max(2, r.ratio * 100)).toFixed(2)}%"></div>
+              </div>
+              <div class="ct-ratio-text">${r.ratio.toFixed(4)} ratio</div>
+            </div>
+            <div class="ct-card-footer">
+              <button class="action-btn ct-dl-btn" data-format="${r.format}">download .${r.format === 'deflate-raw' ? 'deflate' : r.format === 'br' ? 'br' : r.format}</button>
+            </div>
+          `;
+        }
+
+        cardsEl.appendChild(card);
+      });
+
+      // Best label
+      if (supported.length > 0) {
+        const best = supported.reduce((a, b) => (b.compressedBytes < a.compressedBytes ? b : a));
+        bestLabelEl.textContent = `Best compression: ${best.label} at ${formatBytes(best.compressedBytes)} (${(best.savings * 100).toFixed(1)}% savings)`;
+      }
+
+      // Wire download buttons
+      cardsEl.querySelectorAll<HTMLButtonElement>('.ct-dl-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const fmt = btn.dataset.format as (typeof FORMATS)[number];
+          const result = summary.results.find((r) => r.format === fmt);
+          if (!result?.compressed) return;
+          const blob = new Blob([result.compressed], { type: 'application/octet-stream' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `payload.${fmt === 'deflate-raw' ? 'deflate' : fmt === 'br' ? 'br' : fmt}`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      });
+    } finally {
+      runningJob = false;
+    }
+  }
+
+  function escHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Events ────────────────────────────────────────────────────────────────────
+  inputEl.addEventListener('input', debouncedProcess);
+
+  uploadBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      inputEl.value = (e.target?.result as string) ?? '';
+      debouncedProcess();
+    };
+    reader.readAsText(file);
+    fileInput.value = '';
+  });
+
+  sampleBtn.addEventListener('click', () => {
+    inputEl.value = SAMPLE_PAYLOAD;
+    debouncedProcess();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    inputSizeEl.textContent = '';
+    resultsEl.hidden = true;
+    inputEl.focus();
+  });
+</script>
+
+<style>
+  .ct-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Notices ─────────────────────────────────────────────────────────────── */
+  .ct-notice {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+
+  .ct-notice--warn {
+    border-color: #5a4a00;
+    color: #c8a800;
+  }
+
+  /* ── Section label ───────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  /* ── Input section ───────────────────────────────────────────────────────── */
+  .ct-input-section {
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ct-input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .ct-input-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .ct-textarea {
+    width: 100%;
+    min-height: 180px;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .ct-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  .ct-input-footer {
+    padding: 0.4rem 0.75rem;
+    border-top: 1px solid var(--border);
+    min-height: 1.8rem;
+  }
+
+  /* ── Hidden file input ───────────────────────────────────────────────────── */
+  #ct-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* ── Meta text ───────────────────────────────────────────────────────────── */
+  .ct-meta {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Results ─────────────────────────────────────────────────────────────── */
+  .ct-results {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ct-results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ct-results-footer {
+    padding-top: 0.25rem;
+  }
+
+  /* ── Cards ───────────────────────────────────────────────────────────────── */
+  .ct-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+
+  .ct-card {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .ct-card--unsupported {
+    opacity: 0.45;
+  }
+
+  .ct-card--loading .ct-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+  }
+
+  .ct-loading {
+    color: var(--fg-dim);
+    font-size: 1.2rem;
+    letter-spacing: 0.2em;
+    animation: ct-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes ct-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  .ct-card-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ct-card-body {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex: 1;
+  }
+
+  .ct-unsupported-msg {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    font-style: italic;
+    line-height: 1.4;
+  }
+
+  .ct-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .ct-stat-value {
+    font-size: 1rem;
+    color: var(--fg);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+
+  .ct-stat-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .ct-pct--great {
+    color: #7ec8a0;
+  }
+
+  .ct-pct--ok {
+    color: #d4a96a;
+  }
+
+  .ct-pct--bad {
+    color: #f07070;
+  }
+
+  /* ── Compression bar ─────────────────────────────────────────────────────── */
+  .ct-bar-wrap {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .ct-bar {
+    height: 100%;
+    background: var(--fg-dim);
+    transition: width 0.3s ease;
+  }
+
+  .ct-ratio-text {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Card footer ─────────────────────────────────────────────────────────── */
+  .ct-card-footer {
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .ct-dl-btn {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .ct-cards {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .ct-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

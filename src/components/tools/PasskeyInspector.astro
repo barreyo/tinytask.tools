@@ -1,0 +1,1002 @@
+---
+// No server-side logic needed — fully client-side
+---
+
+<div class="pk-tool">
+  <!-- Tab bar -->
+  <div class="pk-tabs" role="tablist" aria-label="Passkey Inspector sections">
+    <button class="pk-tab active" role="tab" data-tab="aaguid" aria-selected="true"
+      >AAGUID Lookup</button
+    >
+    <button class="pk-tab" role="tab" data-tab="webauthn" aria-selected="false"
+      >WebAuthn Decoder</button
+    >
+    <button class="pk-tab" role="tab" data-tab="clientdata" aria-selected="false"
+      >ClientDataJSON</button
+    >
+    <button class="pk-tab" role="tab" data-tab="playground" aria-selected="false">Playground</button
+    >
+  </div>
+
+  <!-- Tab: AAGUID Lookup ─────────────────────────────────────────────────── -->
+  <div id="tab-aaguid" class="pk-panel" role="tabpanel">
+    <p class="pk-hint">
+      Paste an AAGUID (e.g. <code>adce3619-3575-4043-9fd0-39a9c8702958</code>) to identify the
+      authenticator.
+    </p>
+    <div class="pk-row">
+      <input
+        id="aaguid-input"
+        class="pk-input pk-input--full"
+        type="text"
+        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        spellcheck="false"
+        autocomplete="off"
+        aria-label="AAGUID"
+      />
+    </div>
+    <div id="aaguid-result" class="aaguid-result" hidden></div>
+  </div>
+
+  <!-- Tab: WebAuthn Decoder ─────────────────────────────────────────────── -->
+  <div id="tab-webauthn" class="pk-panel" role="tabpanel" hidden>
+    <p class="pk-hint">
+      Paste a <code>PublicKeyCredential</code> JSON response (from registration or authentication). The
+      full object or just the <code>response</code> field.
+    </p>
+    <div class="pk-editor-wrap">
+      <textarea
+        id="webauthn-input"
+        class="pk-textarea"
+        placeholder='{"id": "...", "response": {"clientDataJSON": "...", "attestationObject": "..."}}'
+        spellcheck="false"
+        autocomplete="off"
+        aria-label="PublicKeyCredential JSON"></textarea>
+    </div>
+    <div class="pk-actions">
+      <button id="webauthn-decode-btn" class="action-btn primary">decode</button>
+      <button id="webauthn-clear-btn" class="action-btn">clear</button>
+    </div>
+    <div id="webauthn-output" class="pk-output" hidden></div>
+  </div>
+
+  <!-- Tab: ClientDataJSON ────────────────────────────────────────────────── -->
+  <div id="tab-clientdata" class="pk-panel" role="tabpanel" hidden>
+    <p class="pk-hint">
+      Paste the Base64URL-encoded <code>clientDataJSON</code> string. This reveals <code
+        >origin</code
+      >, <code>challenge</code>, and <code>type</code> — where most "Invalid Origin" auth failures hide.
+    </p>
+    <div class="pk-row">
+      <textarea
+        id="clientdata-input"
+        class="pk-textarea pk-textarea--short"
+        placeholder="eyJ0eXBlIjoiLi4uIn0..."
+        spellcheck="false"
+        autocomplete="off"
+        aria-label="Base64URL clientDataJSON"></textarea>
+    </div>
+    <div id="clientdata-output" class="pk-output" hidden></div>
+  </div>
+
+  <!-- Tab: Playground ───────────────────────────────────────────────────── -->
+  <div id="tab-playground" class="pk-panel" role="tabpanel" hidden>
+    <div id="playground-support-notice" class="pk-notice pk-notice--warn" hidden>
+      <strong>WebAuthn not available</strong> — your browser or context does not support the
+      <code>PublicKeyCredential</code> API. Try Chrome, Firefox, or Safari on a device with a biometric
+      or security key, served over HTTPS.
+    </div>
+
+    <div id="playground-https-notice" class="pk-notice pk-notice--warn" hidden>
+      <strong>HTTPS required</strong> — WebAuthn credentials can only be created and used on secure origins
+      (<code>https://</code> or <code>localhost</code>). The Playground buttons are disabled.
+    </div>
+
+    <div id="playground-content">
+      <p class="pk-hint">
+        Create and authenticate a passkey using your browser's built-in authenticator. The response
+        is automatically decoded and shown in the <strong>WebAuthn Decoder</strong> tab.
+      </p>
+
+      <div class="pg-grid">
+        <div class="pg-card">
+          <div class="pg-card-header">
+            <span class="pg-card-label">register</span>
+          </div>
+          <p class="pg-card-desc">
+            Calls <code>navigator.credentials.create()</code> with the Passkey Playground as the relying
+            party. Your device will prompt for biometric or PIN.
+          </p>
+          <button id="pg-register-btn" class="action-btn primary">create passkey</button>
+          <div id="pg-register-status" class="pg-status"></div>
+        </div>
+
+        <div class="pg-card">
+          <div class="pg-card-header">
+            <span class="pg-card-label">authenticate</span>
+          </div>
+          <p class="pg-card-desc">
+            Calls <code>navigator.credentials.get()</code> to assert an existing passkey. If you haven't
+            registered one above, your browser may show a blank list.
+          </p>
+          <button id="pg-auth-btn" class="action-btn">authenticate</button>
+          <div id="pg-auth-status" class="pg-status"></div>
+        </div>
+      </div>
+
+      <div id="pg-conditional-notice" class="pk-notice pk-notice--info" hidden>
+        <strong>Conditional UI (Autofill)</strong> is available in your browser. In a real implementation
+        you can pass <code>mediation: "conditional"</code> to
+        <code>credentials.get()</code> to show passkeys inline in the username field's autofill dropdown.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    lookupAaguid,
+    decodeClientDataJson,
+    decodePublicKeyCredential,
+    getCoseAlgName,
+    getCoseKtyName,
+    getCoseCrvName,
+    type AuthData,
+    type AttestedCredentialData,
+    type ClientData,
+    type AttestationObject,
+  } from '../../lib/passkey-inspector';
+
+  // ── Tab switching ─────────────────────────────────────────────────────────────
+  const tabs = document.querySelectorAll<HTMLButtonElement>('.pk-tab');
+  const panels = document.querySelectorAll<HTMLDivElement>('.pk-panel');
+
+  function switchTab(id: string): void {
+    tabs.forEach((t) => {
+      const active = t.dataset.tab === id;
+      t.classList.toggle('active', active);
+      t.setAttribute('aria-selected', String(active));
+    });
+    panels.forEach((p) => {
+      p.hidden = p.id !== `tab-${id}`;
+    });
+  }
+
+  tabs.forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab ?? '')));
+
+  // ── AAGUID Lookup ─────────────────────────────────────────────────────────────
+  const aaguidInput = document.getElementById('aaguid-input') as HTMLInputElement;
+  const aaguidResult = document.getElementById('aaguid-result') as HTMLDivElement;
+
+  function doAaguidLookup(): void {
+    const val = aaguidInput.value.trim();
+    if (!val) {
+      aaguidResult.hidden = true;
+      return;
+    }
+    const result = lookupAaguid(val);
+    aaguidResult.hidden = false;
+    aaguidResult.innerHTML = `
+      <div class="aaguid-row">
+        <span class="field-label">aaguid</span>
+        <span class="field-value field-mono">${escHtml(result.aaguid || val)}</span>
+      </div>
+      <div class="aaguid-row">
+        <span class="field-label">authenticator</span>
+        <span class="field-value ${result.found ? 'field-found' : 'field-unknown'}">${escHtml(result.name)}</span>
+      </div>
+    `;
+  }
+
+  aaguidInput.addEventListener('input', doAaguidLookup);
+
+  // ── WebAuthn Decoder ──────────────────────────────────────────────────────────
+  const webauthnInput = document.getElementById('webauthn-input') as HTMLTextAreaElement;
+  const webauthnOutput = document.getElementById('webauthn-output') as HTMLDivElement;
+  const webauthnDecodeBtn = document.getElementById('webauthn-decode-btn') as HTMLButtonElement;
+  const webauthnClearBtn = document.getElementById('webauthn-clear-btn') as HTMLButtonElement;
+
+  webauthnDecodeBtn.addEventListener('click', () => {
+    const text = webauthnInput.value.trim();
+    if (!text) {
+      webauthnOutput.hidden = true;
+      return;
+    }
+    const decoded = decodePublicKeyCredential(text);
+    if (decoded.error) {
+      webauthnOutput.hidden = false;
+      webauthnOutput.innerHTML = `<div class="pk-error">${escHtml(decoded.error)}</div>`;
+      return;
+    }
+    webauthnOutput.hidden = false;
+    webauthnOutput.innerHTML = renderCredential(decoded);
+  });
+
+  webauthnClearBtn.addEventListener('click', () => {
+    webauthnInput.value = '';
+    webauthnOutput.hidden = true;
+  });
+
+  // ── ClientDataJSON Decoder ────────────────────────────────────────────────────
+  const clientdataInput = document.getElementById('clientdata-input') as HTMLTextAreaElement;
+  const clientdataOutput = document.getElementById('clientdata-output') as HTMLDivElement;
+
+  clientdataInput.addEventListener('input', () => {
+    const val = clientdataInput.value.trim();
+    if (!val) {
+      clientdataOutput.hidden = true;
+      return;
+    }
+    try {
+      const decoded = decodeClientDataJson(val);
+      clientdataOutput.hidden = false;
+      clientdataOutput.innerHTML = renderClientData(decoded);
+    } catch (e) {
+      clientdataOutput.hidden = false;
+      clientdataOutput.innerHTML = `<div class="pk-error">${escHtml(String(e))}</div>`;
+    }
+  });
+
+  // ── Playground ────────────────────────────────────────────────────────────────
+  const pgRegisterBtn = document.getElementById('pg-register-btn') as HTMLButtonElement;
+  const pgAuthBtn = document.getElementById('pg-auth-btn') as HTMLButtonElement;
+  const pgRegisterStatus = document.getElementById('pg-register-status') as HTMLDivElement;
+  const pgAuthStatus = document.getElementById('pg-auth-status') as HTMLDivElement;
+  const pgSupportNotice = document.getElementById('playground-support-notice') as HTMLDivElement;
+  const pgHttpsNotice = document.getElementById('playground-https-notice') as HTMLDivElement;
+  const pgConditionalNotice = document.getElementById('pg-conditional-notice') as HTMLDivElement;
+
+  const isSecure =
+    location.protocol === 'https:' ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1';
+  const hasWebAuthn = typeof window !== 'undefined' && !!window.PublicKeyCredential;
+
+  if (!hasWebAuthn) {
+    pgSupportNotice.hidden = false;
+    pgRegisterBtn.disabled = true;
+    pgAuthBtn.disabled = true;
+  } else if (!isSecure) {
+    pgHttpsNotice.hidden = false;
+    pgRegisterBtn.disabled = true;
+    pgAuthBtn.disabled = true;
+  } else {
+    // Check conditional mediation
+    if ('isConditionalMediationAvailable' in PublicKeyCredential) {
+      (PublicKeyCredential as { isConditionalMediationAvailable(): Promise<boolean> })
+        .isConditionalMediationAvailable()
+        .then((avail) => {
+          if (avail) pgConditionalNotice.hidden = false;
+        })
+        .catch(() => {});
+    }
+  }
+
+  // RP details for the playground
+  const RP_ID = location.hostname;
+  const RP_NAME = 'tinytask.tools Passkey Playground';
+
+  function randomBytes(n: number): Uint8Array {
+    const buf = new Uint8Array(n);
+    crypto.getRandomValues(buf);
+    return buf;
+  }
+
+  // Store registered credential IDs in session (memory only)
+  let registeredCredIds: ArrayBuffer[] = [];
+
+  pgRegisterBtn.addEventListener('click', async () => {
+    pgRegisterBtn.disabled = true;
+    pgRegisterStatus.textContent = 'Waiting for authenticator…';
+    pgRegisterStatus.className = 'pg-status pg-status--pending';
+
+    const challenge = randomBytes(32);
+    const userId = randomBytes(16);
+
+    try {
+      const cred = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: RP_NAME, id: RP_ID },
+          user: { id: userId, name: 'playground@tinytask.tools', displayName: 'Playground User' },
+          pubKeyCredParams: [
+            { alg: -7, type: 'public-key' },
+            { alg: -257, type: 'public-key' },
+          ],
+          authenticatorSelection: {
+            requireResidentKey: true,
+            residentKey: 'required',
+            userVerification: 'preferred',
+          },
+          timeout: 60000,
+          attestation: 'none',
+        },
+      })) as PublicKeyCredential;
+
+      if (cred) {
+        registeredCredIds.push(cred.rawId);
+        pgRegisterStatus.textContent = 'Registration successful!';
+        pgRegisterStatus.className = 'pg-status pg-status--success';
+
+        const response = cred.response as AuthenticatorAttestationResponse;
+        const credJson = {
+          id: cred.id,
+          rawId: bufToBase64url(cred.rawId),
+          type: cred.type,
+          response: {
+            clientDataJSON: bufToBase64url(response.clientDataJSON),
+            attestationObject: bufToBase64url(response.attestationObject),
+          },
+        };
+
+        // Auto-populate and switch to WebAuthn decoder tab
+        webauthnInput.value = JSON.stringify(credJson, null, 2);
+        webauthnDecodeBtn.click();
+        switchTab('webauthn');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      pgRegisterStatus.textContent = `Error: ${msg}`;
+      pgRegisterStatus.className = 'pg-status pg-status--error';
+    } finally {
+      pgRegisterBtn.disabled = false;
+    }
+  });
+
+  pgAuthBtn.addEventListener('click', async () => {
+    pgAuthBtn.disabled = true;
+    pgAuthStatus.textContent = 'Waiting for authenticator…';
+    pgAuthStatus.className = 'pg-status pg-status--pending';
+
+    const challenge = randomBytes(32);
+
+    try {
+      const cred = (await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: RP_ID,
+          userVerification: 'preferred',
+          timeout: 60000,
+          allowCredentials: registeredCredIds.map((id) => ({ id, type: 'public-key' })),
+        },
+      })) as PublicKeyCredential;
+
+      if (cred) {
+        pgAuthStatus.textContent = 'Authentication successful!';
+        pgAuthStatus.className = 'pg-status pg-status--success';
+
+        const response = cred.response as AuthenticatorAssertionResponse;
+        const credJson = {
+          id: cred.id,
+          rawId: bufToBase64url(cred.rawId),
+          type: cred.type,
+          response: {
+            clientDataJSON: bufToBase64url(response.clientDataJSON),
+            authenticatorData: bufToBase64url(response.authenticatorData),
+            signature: bufToBase64url(response.signature),
+            userHandle: response.userHandle ? bufToBase64url(response.userHandle) : null,
+          },
+        };
+
+        webauthnInput.value = JSON.stringify(credJson, null, 2);
+        webauthnDecodeBtn.click();
+        switchTab('webauthn');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      pgAuthStatus.textContent = `Error: ${msg}`;
+      pgAuthStatus.className = 'pg-status pg-status--error';
+    } finally {
+      pgAuthBtn.disabled = false;
+    }
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function bufToBase64url(buf: ArrayBuffer): string {
+    const bytes = new Uint8Array(buf);
+    const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('');
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  }
+
+  function escHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function field(label: string, value: string, highlight = false, mono = false): string {
+    const cls = ['field-value', highlight ? 'field-highlight' : '', mono ? 'field-mono' : '']
+      .filter(Boolean)
+      .join(' ');
+    return `<div class="pk-field">
+      <span class="field-label">${escHtml(label)}</span>
+      <span class="${cls}">${value}</span>
+    </div>`;
+  }
+
+  function flagBadge(active: boolean, label: string): string {
+    return `<span class="flag-badge ${active ? 'flag-on' : 'flag-off'}" title="${active ? label + ' = true' : label + ' = false'}">${escHtml(label)}</span>`;
+  }
+
+  function section(title: string, content: string): string {
+    return `<div class="pk-section">
+      <div class="pk-section-title">${escHtml(title)}</div>
+      ${content}
+    </div>`;
+  }
+
+  function renderClientData(cd: ClientData): string {
+    const isRegistration = cd.type === 'webauthn.create';
+    const isAssertion = cd.type === 'webauthn.get';
+    const typeLabel = isRegistration
+      ? 'webauthn.create (registration)'
+      : isAssertion
+        ? 'webauthn.get (authentication)'
+        : cd.type;
+
+    let html = field('type', escHtml(typeLabel));
+    html += field('origin', `<span class="field-origin">${escHtml(cd.origin)}</span>`, true);
+    html += field(
+      'challenge (base64url)',
+      `<span class="field-mono field-break">${escHtml(cd.challenge)}</span>`,
+    );
+    if (cd.challengeDecoded && cd.challengeDecoded !== cd.challenge) {
+      html += field(
+        'challenge (decoded)',
+        `<span class="field-mono field-break">${escHtml(cd.challengeDecoded)}</span>`,
+      );
+    }
+    if (cd.crossOrigin !== undefined) {
+      html += field('crossOrigin', String(cd.crossOrigin));
+    }
+    if (cd.tokenBinding) {
+      html += field('tokenBinding.status', escHtml(cd.tokenBinding.status));
+      if (cd.tokenBinding.id) {
+        html += field(
+          'tokenBinding.id',
+          `<span class="field-mono">${escHtml(cd.tokenBinding.id)}</span>`,
+        );
+      }
+    }
+
+    return section('clientDataJSON', html);
+  }
+
+  function renderAuthData(ad: AuthData, title = 'authenticatorData'): string {
+    let html = field(
+      'rpIdHash (hex)',
+      `<span class="field-mono field-break field-dim">${escHtml(ad.rpIdHash)}</span>`,
+    );
+    html += field('signCount', String(ad.signCount));
+
+    const flagsHtml =
+      flagBadge(ad.flags.userPresent, 'UP') +
+      flagBadge(ad.flags.userVerified, 'UV') +
+      flagBadge(ad.flags.backupEligible, 'BE') +
+      flagBadge(ad.flags.backedUp, 'BS') +
+      flagBadge(ad.flags.attestedCredentialData, 'AT') +
+      flagBadge(ad.flags.extensionData, 'ED');
+    html += `<div class="pk-field">
+      <span class="field-label">flags (0x${ad.flags.raw.toString(16).padStart(2, '0')})</span>
+      <span class="field-value flag-row">${flagsHtml}</span>
+    </div>`;
+
+    if (ad.attestedCredentialData) {
+      html += renderAttestedCredData(ad.attestedCredentialData);
+    }
+
+    return section(title, html);
+  }
+
+  function renderAttestedCredData(acd: AttestedCredentialData): string {
+    let html = field(
+      'aaguid',
+      `<span class="field-mono">${escHtml(acd.aaguid)}</span>` +
+        `<span class="field-aaguid-name ${acd.aaguidResult.found ? 'field-found' : 'field-unknown'}">${escHtml(acd.aaguidResult.name)}</span>`,
+    );
+    html += field('credentialId length', `${acd.credentialIdLength} bytes`);
+    html += field(
+      'credentialId (base64url)',
+      `<span class="field-mono field-break field-dim">${escHtml(acd.credentialId)}</span>`,
+    );
+
+    const pk = acd.publicKey;
+    if (pk.kty !== undefined)
+      html += field('key type', `${pk.kty} — ${escHtml(getCoseKtyName(pk.kty))}`);
+    if (pk.alg !== undefined)
+      html += field('algorithm', `${pk.alg} — ${escHtml(getCoseAlgName(pk.alg))}`);
+    if (pk.crv !== undefined)
+      html += field('curve', `${pk.crv} — ${escHtml(getCoseCrvName(pk.crv))}`);
+    if (pk.x)
+      html += field('x', `<span class="field-mono field-break field-dim">${escHtml(pk.x)}</span>`);
+    if (pk.y)
+      html += field('y', `<span class="field-mono field-break field-dim">${escHtml(pk.y)}</span>`);
+    if (pk.n)
+      html += field(
+        'modulus (n)',
+        `<span class="field-mono field-break field-dim">${escHtml(pk.n.slice(0, 64))}…</span>`,
+      );
+    if (pk.e) html += field('exponent (e)', `<span class="field-mono">${escHtml(pk.e)}</span>`);
+
+    return section('attestedCredentialData', html);
+  }
+
+  function renderAttestationObject(ao: AttestationObject): string {
+    let html = field('format', `<span class="field-mono">${escHtml(ao.fmt)}</span>`);
+    html += renderAuthData(ao.authData, 'authData');
+    return section('attestationObject', html);
+  }
+
+  function renderCredential(decoded: ReturnType<typeof decodePublicKeyCredential>): string {
+    const typeLabel =
+      decoded.type === 'registration'
+        ? 'Registration (webauthn.create)'
+        : decoded.type === 'assertion'
+          ? 'Authentication (webauthn.get)'
+          : 'Unknown credential type';
+
+    let html = `<div class="pk-cred-type ${decoded.type}">${escHtml(typeLabel)}</div>`;
+    if (decoded.id) {
+      html += field(
+        'id (base64url)',
+        `<span class="field-mono field-break field-dim">${escHtml(decoded.id)}</span>`,
+      );
+    }
+
+    if (decoded.clientData) {
+      html += renderClientData(decoded.clientData);
+    }
+
+    if (decoded.attestationObject) {
+      html += renderAttestationObject(decoded.attestationObject);
+    }
+
+    if (decoded.authenticatorData) {
+      html += renderAuthData(decoded.authenticatorData, 'authenticatorData');
+    }
+
+    if (decoded.signature) {
+      html += section(
+        'signature',
+        field(
+          'hex',
+          `<span class="field-mono field-break field-dim">${escHtml(decoded.signature)}</span>`,
+        ),
+      );
+    }
+
+    if (decoded.userHandle) {
+      html += section(
+        'userHandle',
+        field('base64url', `<span class="field-mono">${escHtml(decoded.userHandle)}</span>`),
+      );
+    }
+
+    return html;
+  }
+</script>
+
+<style>
+  .pk-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Tab bar ─────────────────────────────────────────────────────────────── */
+  .pk-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .pk-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    transition:
+      color 0.1s,
+      border-color 0.1s;
+    margin-bottom: -1px;
+    white-space: nowrap;
+  }
+
+  .pk-tab:hover {
+    color: var(--fg);
+  }
+
+  .pk-tab.active {
+    color: var(--fg);
+    border-bottom-color: var(--fg);
+  }
+
+  /* ── Panel ───────────────────────────────────────────────────────────────── */
+  .pk-panel {
+    padding: 1.5rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* ── Hint text ───────────────────────────────────────────────────────────── */
+  .pk-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+    line-height: 1.6;
+  }
+
+  .pk-hint code {
+    font-family: inherit;
+    color: var(--fg);
+    font-size: 0.75rem;
+  }
+
+  /* ── Notices ─────────────────────────────────────────────────────────────── */
+  .pk-notice {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+
+  .pk-notice code {
+    font-family: inherit;
+    font-size: 0.75rem;
+  }
+
+  .pk-notice--warn {
+    border-color: #5a4a00;
+    color: #c8a800;
+  }
+
+  .pk-notice--info {
+    border-color: var(--border);
+    color: var(--fg-dim);
+  }
+
+  /* ── Input elements ──────────────────────────────────────────────────────── */
+  .pk-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .pk-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .pk-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .pk-input--full {
+    flex: 1;
+  }
+
+  .pk-editor-wrap {
+    border: 1px solid var(--border);
+  }
+
+  .pk-textarea {
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    padding: 0.75rem;
+    resize: vertical;
+    outline: none;
+    min-height: 120px;
+    display: block;
+    box-sizing: border-box;
+  }
+
+  .pk-textarea--short {
+    min-height: 80px;
+    border: 1px solid var(--border);
+  }
+
+  .pk-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  /* ── Action buttons ──────────────────────────────────────────────────────── */
+  .pk-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .action-btn.primary {
+    border-color: var(--fg-dim);
+    color: var(--fg);
+  }
+
+  /* ── Output / sections ───────────────────────────────────────────────────── */
+  .pk-output {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .pk-error {
+    padding: 0.75rem;
+    border: 1px solid #5a1a1a;
+    color: #f07070;
+    font-size: 0.8rem;
+  }
+
+  .pk-section {
+    border: 1px solid var(--border);
+    margin-top: 0.75rem;
+  }
+
+  .pk-section-title {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Fields ──────────────────────────────────────────────────────────────── */
+  .pk-field {
+    display: grid;
+    grid-template-columns: 11rem 1fr;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+    font-size: 0.78rem;
+  }
+
+  .pk-field:last-child {
+    border-bottom: none;
+  }
+
+  .field-label {
+    color: var(--fg-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  .field-value {
+    color: var(--fg);
+    word-break: break-all;
+  }
+
+  .field-mono {
+    font-family: inherit;
+    font-size: 0.75rem;
+  }
+
+  .field-break {
+    word-break: break-all;
+  }
+
+  .field-dim {
+    color: var(--fg-dim);
+  }
+
+  .field-highlight {
+    color: var(--fg);
+  }
+
+  .field-found {
+    color: #7ec8a0;
+    font-size: 0.75rem;
+  }
+
+  .field-unknown {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    font-style: italic;
+  }
+
+  .field-origin {
+    color: #c8b4f0;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+
+  .field-aaguid-name {
+    display: inline-block;
+    margin-left: 0.75rem;
+    font-size: 0.72rem;
+  }
+
+  /* ── Flag badges ─────────────────────────────────────────────────────────── */
+  .flag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .flag-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  .flag-on {
+    border-color: #7ec8a0;
+    color: #7ec8a0;
+    background: rgba(126, 200, 160, 0.08);
+  }
+
+  .flag-off {
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  /* ── Credential type badge ───────────────────────────────────────────────── */
+  .pk-cred-type {
+    display: inline-block;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    margin-bottom: 0.25rem;
+  }
+
+  .pk-cred-type.registration {
+    border-color: #7aabcc;
+    color: #7aabcc;
+  }
+
+  .pk-cred-type.assertion {
+    border-color: #c8b4f0;
+    color: #c8b4f0;
+  }
+
+  /* ── AAGUID result ───────────────────────────────────────────────────────── */
+  .aaguid-result {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .aaguid-row {
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+    font-size: 0.8rem;
+  }
+
+  .aaguid-row .field-label {
+    min-width: 7rem;
+  }
+
+  /* ── Playground ──────────────────────────────────────────────────────────── */
+  .pg-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .pg-card {
+    border: 1px solid var(--border);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .pg-card-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  .pg-card-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .pg-card-desc {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+
+  .pg-card-desc code {
+    font-family: inherit;
+    font-size: 0.72rem;
+    color: var(--fg);
+  }
+
+  .pg-status {
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    min-height: 1.2em;
+  }
+
+  .pg-status--pending {
+    color: var(--fg-dim);
+  }
+
+  .pg-status--success {
+    color: #7ec8a0;
+  }
+
+  .pg-status--error {
+    color: #f07070;
+  }
+
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .pg-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .pk-field {
+      grid-template-columns: 1fr;
+      gap: 0.2rem;
+    }
+
+    .pk-tabs {
+      gap: 0;
+    }
+
+    .pk-tab {
+      font-size: 0.65rem;
+      padding: 0.5rem 0.6rem;
+    }
+  }
+</style>

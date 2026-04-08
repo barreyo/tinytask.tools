@@ -99,7 +99,7 @@ const itemListSchema = {
       <button class="search-trigger" id="search-trigger" aria-label="Search tools (⌘F)">
         <span class="search-trigger-prompt">&gt;</span>
         <span class="search-trigger-label">find a tool…</span>
-        <kbd class="search-trigger-hint">⌘F</kbd>
+        <kbd class="search-trigger-hint"><span class="mod">⌘</span><span class="sep">+</span>F</kbd>
       </button>
     </header>
 
@@ -119,11 +119,30 @@ const itemListSchema = {
           rel="noopener noreferrer">contribute on GitHub</a
         >.
       </p>
+      <ul class="keybindings" aria-label="Keyboard shortcuts">
+        <li>
+          <kbd id="kb-search"><span class="mod">⌘</span><span class="sep">+</span>F</kbd> search
+        </li>
+        <li><kbd>f</kbd> hint mode</li>
+        <li><kbd>↵</kbd> open result</li>
+        <li><kbd>esc</kbd> close</li>
+      </ul>
     </footer>
   </div>
 
   <ToolSearch totalCount={tools.length} />
 </Layout>
+
+<script>
+  // ── Platform-aware keybinding label ──────────────────────────────────────
+  (function patchSearchKbd() {
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+    if (!isMac) {
+      const kbd = document.getElementById('kb-search');
+      if (kbd) kbd.innerHTML = '<span class="mod">Ctrl</span><span class="sep">+</span>F';
+    }
+  })();
+</script>
 
 <script>
   // ── Search trigger buttons ────────────────────────────────────────────────
@@ -134,7 +153,7 @@ const itemListSchema = {
     const hint = trigger?.querySelector('.search-trigger-hint');
 
     if (hint && !/mac/i.test(navigator.platform)) {
-      hint.textContent = 'Ctrl+F';
+      hint.innerHTML = '<span class="mod">Ctrl</span><span class="sep">+</span>F';
     }
 
     function openPanel() {
@@ -156,7 +175,7 @@ const itemListSchema = {
 
 <script>
   // ── Vimium-style hint navigation ──────────────────────────────────────────
-  const HINT_KEYS = 'asdfghjklqwertyuiopzxcvbnm'.split('');
+  const HINT_KEYS = 'asdfghjklqwertyuiopzxcvbnm1234567890'.split('');
   let hintMode = false;
   let hintGrid: HTMLElement | null = null;
 
@@ -217,7 +236,7 @@ const itemListSchema = {
     }
 
     const key = e.key.toLowerCase();
-    if (/^[a-z]$/.test(key)) {
+    if (/^[a-z0-9]$/.test(key)) {
       e.preventDefault();
       const wrapper = hintGrid?.querySelector(`.tool-card-wrapper[data-hint-key="${key}"]`);
       if (wrapper) {
@@ -476,6 +495,15 @@ const itemListSchema = {
     flex-shrink: 0;
   }
 
+  .search-trigger-hint .mod {
+    font-size: 1.2em;
+    line-height: 1;
+  }
+
+  .search-trigger-hint .sep {
+    margin: 0 0.25em;
+  }
+
   .tool-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -485,10 +513,18 @@ const itemListSchema = {
   .site-footer {
     margin-top: auto;
     padding: 2rem;
-    text-align: center;
     border-top: 1px solid var(--border);
     font-size: 0.85rem;
     color: var(--fg-dim);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .site-footer p {
+    margin: 0;
   }
 
   .site-footer a {
@@ -499,5 +535,51 @@ const itemListSchema = {
 
   .site-footer a:hover {
     color: var(--accent, var(--fg));
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .keybindings {
+      display: none;
+    }
+  }
+
+  .keybindings {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .keybindings li {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+
+  .keybindings kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.8em;
+    color: var(--fg);
+    background: transparent;
+    line-height: 1.4;
+  }
+
+  .keybindings kbd .mod {
+    font-size: 1.2em;
+    line-height: 1;
+  }
+
+  .keybindings kbd .sep {
+    margin: 0 0.25em;
   }
 </style>

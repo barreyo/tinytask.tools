@@ -1,0 +1,16 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import XmlFormatter from '../../components/tools/XmlFormatter.astro';
+---
+
+<ToolLayout slug="xml-formatter">
+  <XmlFormatter />
+</ToolLayout>
+
+<style is:global>
+  /* Widen the tool page only for the XML formatter */
+  body:has(#xf-input) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

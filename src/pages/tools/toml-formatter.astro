@@ -1,0 +1,16 @@
+---
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import TomlFormatter from '../../components/tools/TomlFormatter.astro';
+---
+
+<ToolLayout slug="toml-formatter">
+  <TomlFormatter />
+</ToolLayout>
+
+<style is:global>
+  /* Widen the tool page only for the TOML formatter */
+  body:has(#tf-input) .tool-page {
+    max-width: 1600px;
+    padding: 0 1.5rem;
+  }
+</style>

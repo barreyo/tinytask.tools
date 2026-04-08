@@ -1,0 +1,358 @@
+---
+// Fully client-side
+---
+
+<div class="tj-tool">
+  <!-- Input pane -->
+  <div class="tj-pane tj-pane--input">
+    <div class="tj-pane-header">
+      <div class="tj-header-left">
+        <span id="tj-input-label" class="tj-pane-label">input</span>
+      </div>
+      <div class="tj-pane-actions">
+        <button id="tj-swap-btn" class="action-btn" aria-label="Swap direction">swap ⇄</button>
+        <button id="tj-clear-btn" class="action-btn" aria-label="Clear input">clear</button>
+      </div>
+    </div>
+    <div class="tj-editor-wrap">
+      <textarea
+        id="tj-input"
+        class="tj-textarea"
+        placeholder="Paste TOML or JSON here…
+
+Direction is auto-detected from the input."
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        aria-label="Input"></textarea>
+    </div>
+  </div>
+
+  <!-- Output pane -->
+  <div class="tj-pane tj-pane--output">
+    <div class="tj-pane-header">
+      <span id="tj-output-label" class="tj-pane-label">output</span>
+      <div class="tj-pane-actions">
+        <button id="tj-copy-btn" class="action-btn" disabled aria-label="Copy output">copy</button>
+        <button id="tj-download-btn" class="action-btn" disabled aria-label="Download output"
+          >download</button
+        >
+      </div>
+    </div>
+    <div id="tj-output" class="tj-output" aria-live="polite">
+      <span class="tj-placeholder">converted output will appear here</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { convert, detectDirection, highlightToml } from '../../lib/toml';
+  import type { Direction } from '../../lib/toml';
+
+  const inputEl = document.getElementById('tj-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('tj-output') as HTMLDivElement;
+  const inputLabel = document.getElementById('tj-input-label') as HTMLSpanElement;
+  const outputLabel = document.getElementById('tj-output-label') as HTMLSpanElement;
+  const copyBtn = document.getElementById('tj-copy-btn') as HTMLButtonElement;
+  const downloadBtn = document.getElementById('tj-download-btn') as HTMLButtonElement;
+  const clearBtn = document.getElementById('tj-clear-btn') as HTMLButtonElement;
+  const swapBtn = document.getElementById('tj-swap-btn') as HTMLButtonElement;
+
+  let currentOutput = '';
+  let manualDirection: Direction | null = null;
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function highlightJson(json: string): string {
+    return json.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+      (match) => {
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) return `<span class="tj-key">${escapeHtml(match)}</span>`;
+          return `<span class="tj-string">${escapeHtml(match)}</span>`;
+        }
+        if (/true|false/.test(match)) return `<span class="tj-bool">${match}</span>`;
+        if (/null/.test(match)) return `<span class="tj-null">${match}</span>`;
+        return `<span class="tj-number">${match}</span>`;
+      },
+    );
+  }
+
+  function getEffectiveDirection(): Direction {
+    if (manualDirection) return manualDirection;
+    return detectDirection(inputEl.value);
+  }
+
+  function updateLabels(dir: Direction) {
+    if (dir === 'toml-to-json') {
+      inputLabel.textContent = 'toml input';
+      outputLabel.textContent = 'json output';
+    } else {
+      inputLabel.textContent = 'json input';
+      outputLabel.textContent = 'toml output';
+    }
+  }
+
+  function process() {
+    const src = inputEl.value;
+
+    if (!src.trim()) {
+      currentOutput = '';
+      outputEl.innerHTML = '<span class="tj-placeholder">converted output will appear here</span>';
+      outputEl.classList.remove('tj-output--error');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      updateLabels('toml-to-json');
+      return;
+    }
+
+    const dir = getEffectiveDirection();
+    updateLabels(dir);
+
+    try {
+      const result = convert(src, dir);
+      currentOutput = result;
+
+      const highlighted =
+        dir === 'toml-to-json'
+          ? highlightJson(escapeHtml(result))
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+          : highlightToml(result);
+
+      outputEl.innerHTML = `<pre class="tj-pre">${highlighted}</pre>`;
+      outputEl.classList.remove('tj-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } catch (err) {
+      currentOutput = '';
+      outputEl.innerHTML = `<pre class="tj-pre tj-pre--error">${escapeHtml((err as Error).message)}</pre>`;
+      outputEl.classList.add('tj-output--error');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+    }
+  }
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  inputEl.addEventListener('input', () => {
+    manualDirection = null;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(process, 200);
+  });
+
+  swapBtn.addEventListener('click', () => {
+    if (currentOutput) {
+      inputEl.value = currentOutput;
+      const current = getEffectiveDirection();
+      manualDirection = current === 'toml-to-json' ? 'json-to-toml' : 'toml-to-json';
+      process();
+    } else {
+      const current = getEffectiveDirection();
+      manualDirection = current === 'toml-to-json' ? 'json-to-toml' : 'toml-to-json';
+      updateLabels(manualDirection);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    manualDirection = null;
+    process();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!currentOutput) return;
+    await navigator.clipboard.writeText(currentOutput);
+    copyBtn.textContent = 'copied';
+    setTimeout(() => {
+      copyBtn.textContent = 'copy';
+    }, 1200);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!currentOutput) return;
+    const dir = getEffectiveDirection();
+    const ext = dir === 'toml-to-json' ? 'json' : 'toml';
+    const mime = dir === 'toml-to-json' ? 'application/json' : 'application/toml';
+    const blob = new Blob([currentOutput], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `converted.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  .tj-tool {
+    --tj-key: #c8b4f0;
+    --tj-string: #7ec8a0;
+    --tj-number: #d4a96a;
+    --tj-bool: #7aabcc;
+    --tj-null: #666;
+    --tj-error-bg: rgba(200, 50, 50, 0.12);
+    --tj-error-fg: #f07070;
+
+    display: flex;
+    gap: 1.5rem;
+    height: calc(100vh - 220px);
+    min-height: 400px;
+  }
+
+  .tj-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+  }
+
+  .tj-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tj-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .tj-pane-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    min-width: 90px;
+  }
+
+  .tj-pane-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .tj-editor-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .tj-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 0.75rem 1rem;
+    resize: none;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+
+  .tj-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  .tj-output {
+    flex: 1;
+    overflow: auto;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+
+  .tj-output--error {
+    background: var(--tj-error-bg);
+  }
+
+  .tj-placeholder {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+    opacity: 0.5;
+  }
+
+  :global(.tj-pre) {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  :global(.tj-pre--error) {
+    color: var(--tj-error-fg);
+  }
+
+  :global(.tj-key) {
+    color: var(--tj-key);
+    font-weight: 600;
+  }
+  :global(.tj-string) {
+    color: var(--tj-string);
+  }
+  :global(.tj-number) {
+    color: var(--tj-number);
+  }
+  :global(.tj-bool) {
+    color: var(--tj-bool);
+  }
+  :global(.tj-null) {
+    color: var(--tj-null);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  @media (max-width: 640px) {
+    .tj-tool {
+      flex-direction: column;
+      height: auto;
+    }
+
+    .tj-pane {
+      height: 300px;
+    }
+  }
+</style>

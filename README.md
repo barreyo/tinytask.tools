@@ -13,30 +13,39 @@ Free, browser-only developer utilities. No sign-ups, no tracking, no server proc
 
 ## Tools
 
-| Tool                                                                          | Description                                                |
-| :---------------------------------------------------------------------------- | :--------------------------------------------------------- |
-| [UUID Generator](https://tinytask.tools/tools/uuid-generator)                 | Generate v1, v4, v5, v7 UUIDs and ULIDs                    |
-| [Base64 Encoder / Decoder](https://tinytask.tools/tools/base64)               | Encode and decode Base64 and Base64URL strings             |
-| [JSON Formatter](https://tinytask.tools/tools/json-formatter)                 | Prettify, minify, and validate JSON                        |
-| [URL Encoder / Decoder](https://tinytask.tools/tools/url-encoder)             | Percent-encode and decode URL components                   |
-| [Crontab Calculator](https://tinytask.tools/tools/crontab)                    | Parse cron expressions and preview upcoming triggers       |
-| [Hash Generator](https://tinytask.tools/tools/hash-generator)                 | Compute MD5, SHA-1, SHA-256, SHA-384, SHA-512 hashes       |
-| [Unix Timestamp](https://tinytask.tools/tools/timestamp)                      | Convert between epoch timestamps and dates                 |
-| [List Cleaner](https://tinytask.tools/tools/list-cleaner)                     | Deduplicate, sort, trim, and reformat lists                |
-| [Luhn Checker](https://tinytask.tools/tools/luhn-checker)                     | Validate or generate card numbers using the Luhn algorithm |
-| [JWT Debugger](https://tinytask.tools/tools/jwt-debugger)                     | Decode JWT header, payload, and signature                  |
-| [ISO 4217 Currency Lookup](https://tinytask.tools/tools/currency-lookup)      | Search currency codes, symbols, and exponents              |
-| [YAML ↔ JSON](https://tinytask.tools/tools/yaml-json)                         | Convert between YAML and JSON                              |
-| [Diff Checker](https://tinytask.tools/tools/diff-checker)                     | Compare two texts side-by-side or inline                   |
-| [SVG Optimizer](https://tinytask.tools/tools/svg-optimizer)                   | Minify and clean SVGs with SVGO                            |
-| [Image → WebP](https://tinytask.tools/tools/image-optimizer)                  | Convert images to WebP with adjustable quality             |
-| [Dummy Text Generator](https://tinytask.tools/tools/dummy-text)               | Generate themed placeholder text                           |
-| [CSV ↔ JSON](https://tinytask.tools/tools/csv-json)                           | Convert between CSV and JSON                               |
-| [Interest / APR Calculator](https://tinytask.tools/tools/interest-calculator) | Loan amortization and interest accrual                     |
-| [Password Generator](https://tinytask.tools/tools/password-generator)         | Cryptographically random passwords and secrets             |
-| [RSA Key Pair Generator](https://tinytask.tools/tools/rsa-keygen)             | Generate RSA key pairs in the browser                      |
-| [Character / Word Counter](https://tinytask.tools/tools/text-counter)         | Live character, word, sentence, and byte counts            |
-| [QR Code Generator](https://tinytask.tools/tools/qr-code-generator)           | Styled QR codes with custom shapes and colours             |
+| Tool                                                                          | Description                                                    |
+| :---------------------------------------------------------------------------- | :------------------------------------------------------------- |
+| [UUID Generator](https://tinytask.tools/tools/uuid-generator)                 | Generate v1, v4, v5, v7 UUIDs and ULIDs                        |
+| [Base64 Encoder / Decoder](https://tinytask.tools/tools/base64)               | Encode and decode Base64 and Base64URL strings                 |
+| [JSON Formatter](https://tinytask.tools/tools/json-formatter)                 | Prettify, minify, and validate JSON                            |
+| [URL Encoder / Decoder](https://tinytask.tools/tools/url-encoder)             | Percent-encode and decode URL components                       |
+| [Crontab Calculator](https://tinytask.tools/tools/crontab)                    | Parse cron expressions and preview upcoming triggers           |
+| [Hash Generator](https://tinytask.tools/tools/hash-generator)                 | Compute MD5, SHA-1, SHA-256, SHA-384, SHA-512 hashes           |
+| [Unix Timestamp](https://tinytask.tools/tools/timestamp)                      | Convert between epoch timestamps and dates                     |
+| [List Cleaner](https://tinytask.tools/tools/list-cleaner)                     | Deduplicate, sort, trim, and reformat lists                    |
+| [Luhn Checker](https://tinytask.tools/tools/luhn-checker)                     | Validate or generate card numbers using the Luhn algorithm     |
+| [JWT Debugger](https://tinytask.tools/tools/jwt-debugger)                     | Decode JWT header, payload, and signature                      |
+| [ISO 4217 Currency Lookup](https://tinytask.tools/tools/currency-lookup)      | Search currency codes, symbols, and exponents                  |
+| [TOML Formatter](https://tinytask.tools/tools/toml-formatter)                 | Prettify and validate TOML with syntax highlighting            |
+| [TOML ↔ JSON](https://tinytask.tools/tools/toml-json)                         | Convert between TOML and JSON                                  |
+| [YAML ↔ JSON](https://tinytask.tools/tools/yaml-json)                         | Convert between YAML and JSON                                  |
+| [Diff Checker](https://tinytask.tools/tools/diff-checker)                     | Compare two texts side-by-side or inline                       |
+| [SVG Optimizer](https://tinytask.tools/tools/svg-optimizer)                   | Minify and clean SVGs with SVGO                                |
+| [Image → WebP](https://tinytask.tools/tools/image-optimizer)                  | Convert images to WebP with adjustable quality                 |
+| [Dummy Text Generator](https://tinytask.tools/tools/dummy-text)               | Generate themed placeholder text                               |
+| [CSV ↔ JSON](https://tinytask.tools/tools/csv-json)                           | Convert between CSV and JSON                                   |
+| [Interest / APR Calculator](https://tinytask.tools/tools/interest-calculator) | Loan amortization and interest accrual                         |
+| [Password Generator](https://tinytask.tools/tools/password-generator)         | Cryptographically random passwords and secrets                 |
+| [RSA Key Pair Generator](https://tinytask.tools/tools/rsa-keygen)             | Generate RSA key pairs in the browser                          |
+| [Character / Word Counter](https://tinytask.tools/tools/text-counter)         | Live character, word, sentence, and byte counts                |
+| [HTTP Status Code Reference](https://tinytask.tools/tools/http-status-codes)  | Quick-search reference for all 1xx–5xx status codes            |
+| [HTTP Header Parser](https://tinytask.tools/tools/http-header-parser)         | Parse raw HTTP headers into a clean, annotated table           |
+| [QR Code Generator](https://tinytask.tools/tools/qr-code-generator)           | Styled QR codes with custom shapes and colours                 |
+| [XML Formatter](https://tinytask.tools/tools/xml-formatter)                   | Prettify and validate XML with syntax highlighting             |
+| [Color Picker](https://tinytask.tools/tools/color-picker)                     | Sample any screen color and get hex, RGB, HSL, oklch, and more |
+| [Gzip / Brotli Tester](https://tinytask.tools/tools/compression-tester)       | See compressed payload size for gzip, deflate, and brotli      |
+| [Passkey Inspector](https://tinytask.tools/tools/passkey-inspector)           | Decode WebAuthn payloads, look up AAGUIDs, inspect passkeys    |
+| [NACHA / ACH File Parser](https://tinytask.tools/tools/nacha-parser)          | Parse, validate, and generate NACHA ACH files                  |
 
 ## Tech stack
 
