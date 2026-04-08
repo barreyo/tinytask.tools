@@ -118,8 +118,8 @@ export const tools: Tool[] = [
         a: '* means every value; , separates multiple values; - defines a range; / specifies a step (e.g., */5 means every 5 units); ? means no specific value (day fields only in some dialects).',
       },
       {
-        q: 'Does this support seconds?',
-        a: 'Yes. A six-field expression with a leading seconds field (0–59) is supported alongside the standard five-field POSIX format.',
+        q: 'What if I paste a 6-field expression with seconds?',
+        a: 'This tool uses the standard 5-field POSIX format (minute hour day month weekday). If you paste a 6-field expression the validator will flag it and suggest removing the leading seconds field.',
       },
     ],
   },

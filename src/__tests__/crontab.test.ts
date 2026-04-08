@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseCronExpression,
+  validateCronExpression,
   describeCron,
   describeField,
   getNextOccurrences,
@@ -206,6 +207,15 @@ describe('describeCron', () => {
     expect(desc).toMatch(/17/);
   });
 
+  it('describes oversized steps with concrete values', () => {
+    const parts = parseCronExpression('* * */30 */30 */30');
+    const desc = describeCron(parts);
+    expect(desc).toMatch(/1st/);
+    expect(desc).toMatch(/January/i);
+    expect(desc).toMatch(/Sunday/i);
+    expect(desc).not.toMatch(/every 30/i);
+  });
+
   it('returns a non-empty string for any valid expression', () => {
     const exprs = ['* * * * *', '0 9 * * 1-5', '*/15 * * * *', '0 0 1 * *', '30 6 * * 0'];
     for (const expr of exprs) {
@@ -265,6 +275,34 @@ describe('describeField', () => {
 
   it('describes a specific day of month', () => {
     expect(describeField('15', 'dayOfMonth')).toMatch(/15th/);
+  });
+
+  it('expands oversized month step to concrete values', () => {
+    expect(describeField('*/30', 'month')).toMatch(/January/i);
+    expect(describeField('*/30', 'month')).not.toMatch(/30/);
+  });
+
+  it('expands oversized day-of-week step to concrete value', () => {
+    expect(describeField('*/30', 'dayOfWeek')).toMatch(/Sunday/i);
+    expect(describeField('*/30', 'dayOfWeek')).not.toMatch(/30/);
+  });
+
+  it('expands oversized day-of-month step to concrete values', () => {
+    const result = describeField('*/30', 'dayOfMonth');
+    expect(result).toMatch(/1st/);
+    expect(result).toMatch(/31st/);
+    expect(result).not.toMatch(/30/);
+  });
+
+  it('expands */6 month to two concrete months', () => {
+    const result = describeField('*/6', 'month');
+    expect(result).toMatch(/January/i);
+    expect(result).toMatch(/July/i);
+  });
+
+  it('keeps "every N" for steps that produce many values', () => {
+    expect(describeField('*/15', 'minute')).toMatch(/15 minute/i);
+    expect(describeField('*/3', 'month')).toMatch(/3 month/i);
   });
 });
 
@@ -393,5 +431,130 @@ describe('formatNextDate', () => {
     const d = new Date(2026, 3, 7, 9, 0, 0); // Tuesday
     const formatted = formatNextDate(d);
     expect(formatted).toMatch(/Tue/);
+  });
+});
+
+// ── validateCronExpression ────────────────────────────────────────────────────
+
+describe('validateCronExpression', () => {
+  it('returns no errors for a valid expression', () => {
+    expect(validateCronExpression('* * * * *')).toEqual([]);
+    expect(validateCronExpression('0 9 * * 1-5')).toEqual([]);
+    expect(validateCronExpression('*/15 * * * *')).toEqual([]);
+    expect(validateCronExpression('0 0 1 JAN *')).toEqual([]);
+    expect(validateCronExpression('0 12 * * MON,FRI')).toEqual([]);
+  });
+
+  it('reports empty expression', () => {
+    const errors = validateCronExpression('');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].field).toBe('expression');
+    expect(errors[0].suggestion).toBeTruthy();
+  });
+
+  it('reports wrong field count', () => {
+    const tooFew = validateCronExpression('* * *');
+    expect(tooFew).toHaveLength(1);
+    expect(tooFew[0].message).toMatch(/5 fields/);
+    expect(tooFew[0].message).toMatch(/got 3/);
+
+    const tooMany = validateCronExpression('* * * * * *');
+    expect(tooMany).toHaveLength(1);
+    expect(tooMany[0].message).toMatch(/got 6/);
+    expect(tooMany[0].suggestion).toMatch(/seconds/i);
+  });
+
+  it('suggests removing seconds field for 6-field expression', () => {
+    const errors = validateCronExpression('0 */5 * * * *');
+    expect(errors[0].suggestion).toContain('*/5 * * * *');
+  });
+
+  it('reports out-of-range values with field name', () => {
+    const errors = validateCronExpression('60 * * * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].field).toBe('minute');
+    expect(errors[0].message).toMatch(/60/);
+    expect(errors[0].message).toMatch(/0–59/);
+    expect(errors[0].suggestion).toBeTruthy();
+  });
+
+  it('collects errors from multiple fields at once', () => {
+    const errors = validateCronExpression('60 25 0 13 8');
+    expect(errors.length).toBeGreaterThanOrEqual(3);
+    const fields = errors.map((e) => e.field);
+    expect(fields).toContain('minute');
+    expect(fields).toContain('hour');
+    expect(fields).toContain('month');
+  });
+
+  it('detects ? as Quartz extension', () => {
+    const errors = validateCronExpression('0 0 ? * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].field).toBe('dayOfMonth');
+    expect(errors[0].message).toMatch(/\?/);
+    expect(errors[0].suggestion).toMatch(/\*/);
+  });
+
+  it('detects # as Quartz extension', () => {
+    const errors = validateCronExpression('0 0 * * 2#3');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].field).toBe('dayOfWeek');
+    expect(errors[0].message).toMatch(/#/);
+    expect(errors[0].suggestion).toMatch(/Quartz/i);
+  });
+
+  it('detects L as Quartz extension', () => {
+    const errors = validateCronExpression('0 0 L * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/L/);
+  });
+
+  it('detects W as Quartz extension', () => {
+    const errors = validateCronExpression('0 0 15W * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/W/);
+  });
+
+  it('reports reversed range with fix suggestion', () => {
+    const errors = validateCronExpression('59-0 * * * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].field).toBe('minute');
+    expect(errors[0].message).toMatch(/reversed/i);
+    expect(errors[0].suggestion).toMatch(/0-59/);
+  });
+
+  it('reports invalid step', () => {
+    const errors = validateCronExpression('*/0 * * * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/step/i);
+    expect(errors[0].suggestion).toMatch(/interval/i);
+  });
+
+  it('reports multiple slashes', () => {
+    const errors = validateCronExpression('*/5/2 * * * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/multiple \//);
+  });
+
+  it('reports empty atoms from extra commas', () => {
+    const errors = validateCronExpression('1,, * * * *');
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.some((e) => e.message.match(/empty value/i))).toBe(true);
+  });
+
+  it('reports unrecognized values', () => {
+    const errors = validateCronExpression('abc * * * *');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/not a recognized value/);
+  });
+
+  it('every error has a suggestion', () => {
+    const cases = ['', '* *', '60 * * * *', '* * ? * *', '*/0 * * * *', 'abc * * * *'];
+    for (const expr of cases) {
+      const errors = validateCronExpression(expr);
+      for (const err of errors) {
+        expect(err.suggestion).toBeTruthy();
+      }
+    }
   });
 });

@@ -1,5 +1,11 @@
 @import 'tailwindcss';
 
+@theme {
+  --default-font-family:
+    'Berkeley Mono', 'TX-02', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas,
+    'DejaVu Sans Mono', monospace;
+}
+
 /* ─── Reset border-radius everywhere ────────────────────────────────────────── */
 *,
 ::before,
@@ -12,7 +18,7 @@
 :root {
   --bg: #0a0a0a;
   --fg: #e8e8e8;
-  --fg-dim: #666;
+  --fg-dim: #888;
   --border: #2a2a2a;
   --border-active: #e8e8e8;
   --font-mono:
@@ -24,7 +30,7 @@ html {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
 }
@@ -121,7 +127,7 @@ body[data-hint-mode] .tool-card-wrapper[data-hint-key] .tool-card {
   background: var(--fg);
   color: var(--bg);
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.4rem;
@@ -136,6 +142,69 @@ mark {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ─── Custom checkboxes ─────────────────────────────────────────────────────── */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  vertical-align: middle;
+  margin: 0;
+  transition:
+    border-color 0.1s,
+    background-color 0.1s;
+}
+
+input[type='checkbox']:hover {
+  border-color: var(--border-active);
+}
+
+input[type='checkbox']:checked {
+  border-color: var(--fg);
+  background: var(--fg);
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4.5px;
+  top: 1px;
+  width: 4px;
+  height: 9px;
+  border: solid var(--bg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+@media (pointer: coarse) {
+  input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  input[type='checkbox']:checked::after {
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+  }
+
+  label:has(input[type='checkbox']) {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
 }
 
 /* ─── Interactive elements ───────────────────────────────────────────────────── */

@@ -72,7 +72,6 @@
         />
         <label for="cron-dow" class="field-label">weekday</label>
       </div>
-      <button id="cron-parse-btn" class="action-btn primary">parse</button>
     </div>
   </div>
 
@@ -83,7 +82,7 @@
   </div>
 
   <!-- Error -->
-  <p id="cron-error" class="cron-error" hidden></p>
+  <div id="cron-error" class="cron-error" hidden></div>
 
   <!-- Description output -->
   <div id="cron-result" class="result-section" hidden>
@@ -118,6 +117,7 @@
 <script>
   import {
     parseCronExpression,
+    validateCronExpression,
     describeCron,
     describeField,
     getNextOccurrences,
@@ -125,6 +125,7 @@
     CRON_PRESETS,
     FIELD_CONFIGS,
   } from '../../lib/crontab';
+  import type { CronFieldName } from '../../lib/crontab';
 
   // ── Element refs ────────────────────────────────────────────────────────────
   const minuteEl = document.getElementById('cron-minute') as HTMLInputElement;
@@ -133,11 +134,10 @@
   const monthEl = document.getElementById('cron-month') as HTMLInputElement;
   const dowEl = document.getElementById('cron-dow') as HTMLInputElement;
   const fieldInputs = [minuteEl, hourEl, domEl, monthEl, dowEl];
-  const parseBtn = document.getElementById('cron-parse-btn') as HTMLButtonElement;
   const clearBtn = document.getElementById('cron-clear-btn') as HTMLButtonElement;
   const copyExprBtn = document.getElementById('cron-copy-expr-btn') as HTMLButtonElement;
   const copyBtn = document.getElementById('cron-copy-btn') as HTMLButtonElement;
-  const errorEl = document.getElementById('cron-error') as HTMLParagraphElement;
+  const errorEl = document.getElementById('cron-error') as HTMLDivElement;
   const resultSection = document.getElementById('cron-result') as HTMLDivElement;
   const descriptionEl = document.getElementById('cron-description') as HTMLOutputElement;
   const breakdownSection = document.getElementById('cron-breakdown-section') as HTMLDivElement;
@@ -145,6 +145,13 @@
   const nextSection = document.getElementById('cron-next-section') as HTMLDivElement;
   const nextEl = document.getElementById('cron-next') as HTMLOListElement;
   const presetsContainer = document.getElementById('cron-presets') as HTMLDivElement;
+  const fieldMap: Record<CronFieldName, HTMLInputElement> = {
+    minute: minuteEl,
+    hour: hourEl,
+    dayOfMonth: domEl,
+    month: monthEl,
+    dayOfWeek: dowEl,
+  };
 
   // ── Render presets ──────────────────────────────────────────────────────────
   presetsContainer.innerHTML = CRON_PRESETS.map(
@@ -173,24 +180,50 @@
   }
 
   // ── Parse ────────────────────────────────────────────────────────────────────
+  function showErrors(
+    errors: Array<{ field: string; message: string; suggestion?: string }>,
+  ): void {
+    for (const err of errors) {
+      if (err.field !== 'expression') {
+        fieldMap[err.field as CronFieldName]?.classList.add('field-error');
+      }
+    }
+    errorEl.innerHTML = errors
+      .map((err) => {
+        let html = `<div class="error-item"><p class="error-msg">${escapeHtml(err.message)}</p>`;
+        if (err.suggestion) {
+          html += `<p class="error-hint">${escapeHtml(err.suggestion)}</p>`;
+        }
+        return html + '</div>';
+      })
+      .join('');
+    errorEl.hidden = false;
+  }
+
   function parse(): void {
     const expr = getExpression();
     errorEl.hidden = true;
+    errorEl.innerHTML = '';
     resultSection.hidden = true;
     breakdownSection.hidden = true;
     nextSection.hidden = true;
+    fieldInputs.forEach((el) => el.classList.remove('field-error'));
 
     if (!expr) return;
+
+    const validationErrors = validateCronExpression(expr);
+    if (validationErrors.length > 0) {
+      showErrors(validationErrors);
+      return;
+    }
 
     try {
       const parts = parseCronExpression(expr);
 
-      // Description
       const desc = describeCron(parts);
       descriptionEl.textContent = desc;
       resultSection.hidden = false;
 
-      // Breakdown
       breakdownEl.innerHTML = '';
       for (const config of FIELD_CONFIGS) {
         const value = parts[config.name];
@@ -207,15 +240,18 @@
       }
       breakdownSection.hidden = false;
 
-      // Next occurrences
       const occurrences = getNextOccurrences(parts, 5);
       nextEl.innerHTML = occurrences
         .map((d) => `<li class="next-item">${formatNextDate(d)}</li>`)
         .join('');
       nextSection.hidden = occurrences.length === 0;
     } catch (err) {
-      errorEl.textContent = err instanceof Error ? err.message : 'Invalid expression.';
-      errorEl.hidden = false;
+      showErrors([
+        {
+          field: 'expression',
+          message: err instanceof Error ? err.message : 'Invalid expression.',
+        },
+      ]);
     }
   }
 
@@ -234,11 +270,6 @@
     if (debounceTimer !== null) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(parse, 250);
   }
-
-  parseBtn.addEventListener('click', () => {
-    if (debounceTimer !== null) clearTimeout(debounceTimer);
-    parse();
-  });
 
   fieldInputs.forEach((el) => {
     el.addEventListener('input', parseDebounced);
@@ -412,25 +443,6 @@
     align-self: stretch;
   }
 
-  .fields-row .action-btn {
-    align-self: stretch;
-    padding: 0 1.25rem;
-    border-top-style: none;
-    border-right-style: none;
-    border-bottom-style: none;
-    border-left-width: 1px;
-    border-left-style: solid;
-    font-size: 0.75rem;
-    transition:
-      background 0.1s,
-      border-color 0.1s,
-      color 0.1s;
-  }
-
-  .fields-row .action-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
   /* ── Presets ───────────────────────────────────────────────────────────────── */
   .presets-section {
     display: flex;
@@ -465,14 +477,39 @@
     color: var(--fg);
   }
 
+  .field-input.field-error {
+    color: #e05c5c;
+    background: rgba(224, 92, 92, 0.06);
+  }
+
   /* ── Error ─────────────────────────────────────────────────────────────────── */
   .cron-error {
     margin: 0;
-    padding: 0.6rem 0.75rem;
+    border: 1px solid #e05c5c40;
+  }
+
+  :global(.error-item) {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e05c5c15;
+  }
+
+  :global(.error-item:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.error-msg) {
+    margin: 0;
     font-size: 0.75rem;
     letter-spacing: 0.04em;
     color: #e05c5c;
-    border: 1px solid #e05c5c40;
+  }
+
+  :global(.error-hint) {
+    margin: 0.3rem 0 0;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+    color: var(--fg-dim);
+    line-height: 1.45;
   }
 
   /* ── Description output ────────────────────────────────────────────────────── */
@@ -609,10 +646,6 @@
     .field-input {
       font-size: 0.85rem;
       padding: 0.65rem 0.25rem 0.3rem;
-    }
-
-    .fields-row .action-btn {
-      padding: 0 0.75rem;
     }
   }
 </style>

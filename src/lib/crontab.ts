@@ -221,6 +221,243 @@ export function parseCronExpression(expr: string): CronParts {
   return { minute, hour, dayOfMonth, month: normMonth, dayOfWeek: normDow };
 }
 
+// ── Rich validation ──────────────────────────────────────────────────────────
+
+export interface ValidationError {
+  field: CronFieldName | 'expression';
+  message: string;
+  suggestion?: string;
+}
+
+const FIELD_HINTS: Record<CronFieldName, string> = {
+  minute: 'Allowed: 0–59, *, ranges (5-10), lists (0,15,30,45), steps (*/15).',
+  hour: 'Allowed: 0–23, *, ranges (9-17), lists (9,17), steps (*/2).',
+  dayOfMonth: 'Allowed: 1–31, *, ranges (1-15), lists (1,15), steps (*/5).',
+  month: 'Allowed: 1–12 or JAN–DEC, *, ranges (1-6), lists (1,6), steps (*/3).',
+  dayOfWeek: 'Allowed: 0–7 or SUN–SAT (0 and 7 = Sunday), *, ranges (1-5), lists (0,6).',
+};
+
+function validateAtomRich(
+  atom: string,
+  min: number,
+  max: number,
+  label: string,
+  name: CronFieldName,
+): ValidationError[] {
+  if (atom === '*') return [];
+
+  if (atom === '?' || atom.includes('?')) {
+    return [
+      {
+        field: name,
+        message: `${label}: "?" is not standard cron syntax.`,
+        suggestion: `Replace ? with *. The ? character is a Quartz/Spring extension.`,
+      },
+    ];
+  }
+  if (atom.includes('#')) {
+    return [
+      {
+        field: name,
+        message: `${label}: "#" (nth weekday) is not standard cron syntax.`,
+        suggestion: `The # symbol is a Quartz extension. Use a day number instead. ${FIELD_HINTS[name]}`,
+      },
+    ];
+  }
+  if (/^(\d+)?L$/i.test(atom)) {
+    return [
+      {
+        field: name,
+        message: `${label}: "L" (last) is not standard cron syntax.`,
+        suggestion: `L is a Quartz extension. Use a specific day number instead. ${FIELD_HINTS[name]}`,
+      },
+    ];
+  }
+  if (/^\d+W$/i.test(atom) || atom.toUpperCase() === 'LW') {
+    return [
+      {
+        field: name,
+        message: `${label}: "W" (nearest weekday) is not standard cron syntax.`,
+        suggestion: `W is a Quartz extension. Use a day range instead. ${FIELD_HINTS[name]}`,
+      },
+    ];
+  }
+
+  if (atom.includes('/')) {
+    const slashParts = atom.split('/');
+    if (slashParts.length !== 2) {
+      return [
+        {
+          field: name,
+          message: `${label}: "${atom}" has multiple / characters.`,
+          suggestion: `A step needs exactly one /. Example: */5 or 1-10/2. ${FIELD_HINTS[name]}`,
+        },
+      ];
+    }
+    const [base, stepStr] = slashParts;
+    const step = parseInt(stepStr, 10);
+    if (stepStr === '' || isNaN(step) || step < 1 || String(step) !== stepStr) {
+      return [
+        {
+          field: name,
+          message: `${label}: step "${stepStr}" must be a positive integer.`,
+          suggestion: `The number after / sets the interval. Example: */5 means every 5th value. ${FIELD_HINTS[name]}`,
+        },
+      ];
+    }
+    if (base !== '*') {
+      return validateAtomRich(base, min, max, label, name);
+    }
+    return [];
+  }
+
+  if (atom.includes('-')) {
+    const rangeParts = atom.split('-');
+    if (rangeParts.length !== 2) {
+      return [
+        {
+          field: name,
+          message: `${label}: "${atom}" is not a valid range.`,
+          suggestion: `A range uses exactly one hyphen: low-high. Example: 1-5. ${FIELD_HINTS[name]}`,
+        },
+      ];
+    }
+    const errors: ValidationError[] = [];
+    const [startStr, endStr] = rangeParts;
+    const start = parseInt(startStr, 10);
+    const end = parseInt(endStr, 10);
+    if (isNaN(start) || String(start) !== startStr) {
+      errors.push({
+        field: name,
+        message: `${label}: "${startStr}" in range "${atom}" is not a valid number.`,
+        suggestion: FIELD_HINTS[name],
+      });
+    }
+    if (isNaN(end) || String(end) !== endStr) {
+      errors.push({
+        field: name,
+        message: `${label}: "${endStr}" in range "${atom}" is not a valid number.`,
+        suggestion: FIELD_HINTS[name],
+      });
+    }
+    if (errors.length > 0) return errors;
+    if (start < min || start > max) {
+      errors.push({
+        field: name,
+        message: `${label}: ${start} is out of range [${min}–${max}].`,
+        suggestion: FIELD_HINTS[name],
+      });
+    }
+    if (end < min || end > max) {
+      errors.push({
+        field: name,
+        message: `${label}: ${end} is out of range [${min}–${max}].`,
+        suggestion: FIELD_HINTS[name],
+      });
+    }
+    if (errors.length === 0 && start > end) {
+      errors.push({
+        field: name,
+        message: `${label}: range ${start}–${end} is reversed.`,
+        suggestion: `Swap to ${end}-${start}. Cron ranges must go from low to high.`,
+      });
+    }
+    return errors;
+  }
+
+  const n = parseInt(atom, 10);
+  if (isNaN(n) || String(n) !== atom) {
+    return [
+      {
+        field: name,
+        message: `${label}: "${atom}" is not a recognized value.`,
+        suggestion: `Use a number, * (any), a range (1-5), a list (1,3,5), or a step (*/15). ${FIELD_HINTS[name]}`,
+      },
+    ];
+  }
+  if (n < min || n > max) {
+    return [
+      {
+        field: name,
+        message: `${label}: ${n} is out of range [${min}–${max}].`,
+        suggestion: FIELD_HINTS[name],
+      },
+    ];
+  }
+  return [];
+}
+
+function validateFieldRich(
+  field: string,
+  min: number,
+  max: number,
+  label: string,
+  name: CronFieldName,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const atom of field.split(',')) {
+    const trimmed = atom.trim();
+    if (trimmed === '') {
+      errors.push({
+        field: name,
+        message: `${label}: empty value (check for extra commas).`,
+        suggestion: `Remove leading, trailing, or consecutive commas. ${FIELD_HINTS[name]}`,
+      });
+      continue;
+    }
+    errors.push(...validateAtomRich(trimmed, min, max, label, name));
+  }
+  return errors;
+}
+
+export function validateCronExpression(expr: string): ValidationError[] {
+  if (!expr || !expr.trim()) {
+    return [
+      {
+        field: 'expression',
+        message: 'Expression is empty.',
+        suggestion:
+          'A cron expression has 5 fields: minute hour day month weekday. Try a preset below.',
+      },
+    ];
+  }
+
+  const tokens = expr.trim().split(/\s+/);
+  if (tokens.length !== 5) {
+    let suggestion: string;
+    if (tokens.length === 6) {
+      suggestion = `Looks like a 6-field expression with seconds. Standard cron uses 5 fields — try: ${tokens.slice(1).join(' ')}`;
+    } else if (tokens.length < 5) {
+      suggestion =
+        'A cron expression needs 5 space-separated fields: minute hour day month weekday.';
+    } else {
+      suggestion =
+        'A cron expression needs exactly 5 space-separated fields: minute hour day month weekday.';
+    }
+    return [
+      { field: 'expression', message: `Expected 5 fields but got ${tokens.length}.`, suggestion },
+    ];
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = tokens;
+  const normMonth = normaliseMonthNames(month);
+  const normDow = normaliseDowNames(dayOfWeek);
+
+  const checks: Array<[string, number, number, string, CronFieldName]> = [
+    [minute, 0, 59, 'Minute', 'minute'],
+    [hour, 0, 23, 'Hour', 'hour'],
+    [dayOfMonth, 1, 31, 'Day of month', 'dayOfMonth'],
+    [normMonth, 1, 12, 'Month', 'month'],
+    [normDow, 0, 7, 'Day of week', 'dayOfWeek'],
+  ];
+
+  const errors: ValidationError[] = [];
+  for (const [value, min, max, label, name] of checks) {
+    errors.push(...validateFieldRich(value, min, max, label, name));
+  }
+  return errors;
+}
+
 // ── Matching ──────────────────────────────────────────────────────────────────
 
 function expandAtom(atom: string, min: number, max: number): Set<number> {
@@ -357,12 +594,51 @@ export function getNextOccurrences(parts: CronParts, count: number, after?: Date
 
 // ── Human-readable descriptions ───────────────────────────────────────────────
 
+function getStepValues(atom: string, min: number, max: number): number[] {
+  const [base, stepStr] = atom.split('/');
+  const step = parseInt(stepStr, 10);
+  const start = base === '*' ? min : parseInt(base.split('-')[0], 10);
+  const end = base === '*' ? max : base.includes('-') ? parseInt(base.split('-')[1], 10) : max;
+  const values: number[] = [];
+  for (let i = start; i <= end; i += step) values.push(i);
+  return values;
+}
+
+function formatList(items: string[]): string {
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+const STEP_EXPAND_THRESHOLD = 3;
+
 function describeAtom(atom: string, fieldName: CronFieldName): string {
   if (atom === '*') return null as unknown as string;
 
   if (atom.includes('/')) {
     const [base, stepStr] = atom.split('/');
     const step = parseInt(stepStr, 10);
+    const config = FIELD_CONFIGS.find((c) => c.name === fieldName)!;
+    const effectiveMax = fieldName === 'dayOfWeek' ? 6 : config.max;
+    const values = getStepValues(atom, config.min, effectiveMax);
+
+    if (values.length <= STEP_EXPAND_THRESHOLD) {
+      switch (fieldName) {
+        case 'minute':
+          if (values.length === 1) return `at minute ${values[0]}`;
+          return `at minutes ${formatList(values.map(String))}`;
+        case 'hour':
+          if (values.length === 1) return `at ${padHour(values[0])}:00`;
+          return `at ${formatList(values.map((v) => `${padHour(v)}:00`))}`;
+        case 'dayOfMonth':
+          return `on the ${formatList(values.map((v) => ORDINALS[v]))}`;
+        case 'month':
+          return `in ${formatList(values.map((v) => MONTH_FULL[v - 1]))}`;
+        case 'dayOfWeek':
+          return `on ${formatList(values.map((v) => DOW_NAMES[v % 7]))}`;
+      }
+    }
+
     switch (fieldName) {
       case 'minute':
         return base === '*'
@@ -554,9 +830,14 @@ function buildDayDesc(dayOfMonth: string, dayOfWeek: string): string {
 
   if (!domWild) {
     if (dayOfMonth.includes('/')) {
-      const [, stepStr] = dayOfMonth.split('/');
-      const step = parseInt(stepStr, 10);
-      parts.push(`every ${step} day${step === 1 ? '' : 's'} of the month`);
+      const values = getStepValues(dayOfMonth, 1, 31);
+      if (values.length <= STEP_EXPAND_THRESHOLD) {
+        parts.push(`on the ${formatList(values.map((v) => ORDINALS[v]))}`);
+      } else {
+        const [, stepStr] = dayOfMonth.split('/');
+        const step = parseInt(stepStr, 10);
+        parts.push(`every ${step} day${step === 1 ? '' : 's'} of the month`);
+      }
     } else if (dayOfMonth.includes(',')) {
       const days = dayOfMonth.split(',').map((d) => ORDINALS[parseInt(d, 10)]);
       parts.push(`on the ${days.join(', ')}`);
@@ -570,8 +851,14 @@ function buildDayDesc(dayOfMonth: string, dayOfWeek: string): string {
 
   if (!dowWild) {
     if (dayOfWeek.includes('/')) {
-      const [, stepStr] = dayOfWeek.split('/');
-      parts.push(`every ${stepStr} days of the week`);
+      const values = getStepValues(dayOfWeek, 0, 6);
+      if (values.length <= STEP_EXPAND_THRESHOLD) {
+        parts.push(`on ${formatList(values.map((v) => `${DOW_NAMES[v % 7]}s`))}`);
+      } else {
+        const [, stepStr] = dayOfWeek.split('/');
+        const step = parseInt(stepStr, 10);
+        parts.push(`every ${step} day${step === 1 ? '' : 's'} of the week`);
+      }
     } else if (dayOfWeek.includes(',')) {
       const days = dayOfWeek.split(',').map((d) => DOW_NAMES[parseInt(d, 10) % 7]);
       parts.push(`on ${days.join(', ')}`);
@@ -593,6 +880,10 @@ function buildMonthDesc(month: string): string {
   if (month === '*') return '';
 
   if (month.includes('/')) {
+    const values = getStepValues(month, 1, 12);
+    if (values.length <= STEP_EXPAND_THRESHOLD) {
+      return `in ${formatList(values.map((v) => MONTH_FULL[v - 1]))}`;
+    }
     const [, stepStr] = month.split('/');
     const step = parseInt(stepStr, 10);
     return `every ${step} month${step === 1 ? '' : 's'}`;

@@ -35,6 +35,21 @@ const ogImage = image ? new URL(image, SITE_URL).href : new URL('/og-default.png
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style is:inline>
+      html {
+        font-size: 15px;
+        font-family:
+          'Berkeley Mono', 'TX-02', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo,
+          Consolas, 'DejaVu Sans Mono', monospace;
+        background: #0a0a0a;
+        color: #e8e8e8;
+      }
+      body {
+        margin: 0;
+        background: #0a0a0a;
+        color: #e8e8e8;
+      }
+    </style>
 
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
