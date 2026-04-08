@@ -42,6 +42,16 @@ const { totalCount } = Astro.props;
     const status = document.getElementById('search-status');
     const grid = document.querySelector('.tool-grid');
 
+    // This script is bundled for all routes; astro:page-load runs after each
+    // client navigation. Tool search markup only exists on the home page.
+    if (!panel || !backdrop || !input || !status || !grid) {
+      if (window.__searchKeydownHandler) {
+        document.removeEventListener('keydown', window.__searchKeydownHandler);
+        window.__searchKeydownHandler = undefined;
+      }
+      return;
+    }
+
     // ── Open / close ────────────────────────────────────────────────────────
 
     function openSearch() {
