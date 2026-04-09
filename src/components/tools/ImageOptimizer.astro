@@ -95,6 +95,7 @@
 
 <script>
   import { optimizeImage, formatBytes, MAX_DIMENSION_OPTIONS } from '../../lib/image-optimizer';
+  import { getSharedImage, deleteSharedImage } from '../../lib/share-store';
 
   // ── Element refs ──────────────────────────────────────────────────────────────
   const uploadZone = document.getElementById('upload-zone') as HTMLDivElement;
@@ -244,6 +245,20 @@
   }
 
   convertBtn.addEventListener('click', convert);
+
+  // ── Web Share Target: pick up image shared from another app ──────────────────
+  if (new URLSearchParams(location.search).has('shared')) {
+    try {
+      const sharedFile = await getSharedImage();
+      if (sharedFile) {
+        showSettings(sharedFile);
+        await deleteSharedImage();
+      }
+    } catch {
+      // If retrieving fails, fall back to the normal upload UI
+    }
+    history.replaceState(null, '', location.pathname);
+  }
 
   reConvertBtn.addEventListener('click', () => {
     resultPanel.hidden = true;

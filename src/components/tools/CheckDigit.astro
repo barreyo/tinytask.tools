@@ -1,0 +1,646 @@
+---
+// Fully client-side
+---
+
+<div class="cd-tool">
+  <!-- Algorithm selector -->
+  <div class="cd-algo-bar" role="group" aria-label="Algorithm">
+    <button class="cd-algo-btn cd-algo-btn--active" data-algo="verhoeff">Verhoeff</button>
+    <button class="cd-algo-btn" data-algo="damm">Damm</button>
+    <button class="cd-algo-btn" data-algo="isbn10">ISBN-10</button>
+  </div>
+
+  <!-- Algorithm description -->
+  <p id="cd-algo-desc" class="cd-algo-desc"></p>
+
+  <!-- Validate section -->
+  <section class="cd-section">
+    <div class="cd-section-header">
+      <span class="cd-section-label">validate number</span>
+    </div>
+    <div class="cd-section-body">
+      <div class="cd-input-row">
+        <input
+          id="cd-validate-input"
+          class="cd-input"
+          type="text"
+          inputmode="text"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Number to validate"
+        />
+        <div id="cd-badge" class="cd-badge cd-badge--empty" aria-live="polite">—</div>
+      </div>
+      <div id="cd-breakdown" class="cd-breakdown" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- Compute section -->
+  <section class="cd-section">
+    <div class="cd-section-header">
+      <span class="cd-section-label">compute check digit</span>
+    </div>
+    <div class="cd-section-body">
+      <div class="cd-compute-row">
+        <div class="cd-field">
+          <label class="cd-label" for="cd-partial" id="cd-partial-label">Partial number</label>
+          <input
+            id="cd-partial"
+            class="cd-input"
+            type="text"
+            inputmode="text"
+            spellcheck="false"
+            autocomplete="off"
+            aria-labelledby="cd-partial-label"
+          />
+        </div>
+        <button id="cd-compute-btn" class="action-btn cd-compute-btn">compute</button>
+      </div>
+      <div id="cd-compute-output" class="cd-compute-output" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <p class="cd-note">
+    Looking for credit card number validation?
+    <a href="/tools/luhn-checker" class="cd-link">Use the Luhn Checker →</a>
+  </p>
+</div>
+
+<script>
+  import {
+    validateVerhoeff,
+    computeVerhoeffCheckDigit,
+    verhoeffBreakdown,
+    validateDamm,
+    computeDammCheckDigit,
+    dammBreakdown,
+    validateIsbn10,
+    computeIsbn10CheckDigit,
+    isbn10Breakdown,
+  } from '../../lib/check-digit';
+
+  type Algo = 'verhoeff' | 'damm' | 'isbn10';
+
+  const ALGO_META: Record<
+    Algo,
+    {
+      desc: string;
+      placeholder: string;
+      partialHint: string;
+      maxLength: number;
+    }
+  > = {
+    verhoeff: {
+      desc: 'Detects all single-digit errors and all adjacent transpositions. Uses Dihedral group D5 tables — stronger than Luhn.',
+      placeholder: 'e.g. 2363',
+      partialHint: 'Digits without check digit',
+      maxLength: 20,
+    },
+    damm: {
+      desc: 'Detects all single-digit errors and all adjacent transpositions using a 10×10 quasigroup table. Simpler than Verhoeff with the same detection power.',
+      placeholder: 'e.g. 5724',
+      partialHint: 'Digits without check digit',
+      maxLength: 20,
+    },
+    isbn10: {
+      desc: 'Weighted sum modulo 11 for 10-digit international book numbers. The check digit can be 0–9 or X (representing 10). Detects all single-digit and transposition errors.',
+      placeholder: 'e.g. 0-306-40615-2',
+      partialHint: '9 digits (without check digit)',
+      maxLength: 14,
+    },
+  };
+
+  let currentAlgo: Algo = 'verhoeff';
+
+  const algoDesc = document.getElementById('cd-algo-desc') as HTMLParagraphElement;
+  const validateInput = document.getElementById('cd-validate-input') as HTMLInputElement;
+  const badge = document.getElementById('cd-badge') as HTMLDivElement;
+  const breakdownEl = document.getElementById('cd-breakdown') as HTMLDivElement;
+  const partialInput = document.getElementById('cd-partial') as HTMLInputElement;
+  const partialLabel = document.getElementById('cd-partial-label') as HTMLLabelElement;
+  const computeBtn = document.getElementById('cd-compute-btn') as HTMLButtonElement;
+  const computeOutput = document.getElementById('cd-compute-output') as HTMLDivElement;
+
+  function switchAlgo(algo: Algo) {
+    currentAlgo = algo;
+    const meta = ALGO_META[algo];
+
+    algoDesc.textContent = meta.desc;
+    validateInput.placeholder = meta.placeholder;
+    validateInput.maxLength = meta.maxLength;
+    partialLabel.textContent = meta.partialHint;
+
+    // Reset state
+    validateInput.value = '';
+    badge.textContent = '—';
+    badge.className = 'cd-badge cd-badge--empty';
+    breakdownEl.innerHTML = '';
+    partialInput.value = '';
+    computeOutput.innerHTML = '';
+
+    document.querySelectorAll('.cd-algo-btn').forEach((btn) => {
+      btn.classList.toggle('cd-algo-btn--active', (btn as HTMLElement).dataset.algo === algo);
+    });
+  }
+
+  // ── Algorithm selector ────────────────────────────────────────────────────
+  document.querySelectorAll('.cd-algo-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchAlgo((btn as HTMLElement).dataset.algo as Algo);
+    });
+  });
+
+  // ── Validate ──────────────────────────────────────────────────────────────
+  function runValidate(raw: string) {
+    if (raw.length < 2) {
+      badge.textContent = '—';
+      badge.className = 'cd-badge cd-badge--empty';
+      breakdownEl.innerHTML = '';
+      return;
+    }
+
+    let valid = false;
+    if (currentAlgo === 'verhoeff') valid = validateVerhoeff(raw);
+    else if (currentAlgo === 'damm') valid = validateDamm(raw);
+    else valid = validateIsbn10(raw);
+
+    badge.textContent = valid ? 'valid' : 'invalid';
+    badge.className = `cd-badge ${valid ? 'cd-badge--valid' : 'cd-badge--invalid'}`;
+
+    renderBreakdown(raw);
+  }
+
+  validateInput.addEventListener('input', () => {
+    runValidate(validateInput.value);
+  });
+
+  function renderBreakdown(raw: string) {
+    if (currentAlgo === 'verhoeff') renderVerhoeffBreakdown(raw);
+    else if (currentAlgo === 'damm') renderDammBreakdown(raw);
+    else renderIsbn10Breakdown(raw);
+  }
+
+  function renderVerhoeffBreakdown(raw: string) {
+    const steps = verhoeffBreakdown(raw);
+    if (!steps.length) {
+      breakdownEl.innerHTML = '';
+      return;
+    }
+
+    const cells = steps
+      .map(
+        (s) =>
+          `<div class="cd-bd-cell">
+            <span class="cd-bd-orig">${s.digit}</span>
+            <span class="cd-bd-arrow">p→${s.permuted}</span>
+            <span class="cd-bd-val">${s.running}</span>
+          </div>`,
+      )
+      .join('');
+
+    const finalRunning = steps[0].running;
+    const ok = finalRunning === 0;
+    breakdownEl.innerHTML = `
+      <p class="cd-bd-hint">Each cell: digit → permuted → running accumulator</p>
+      <div class="cd-bd-grid">${cells}</div>
+      <div class="cd-bd-sum">
+        final accumulator = <strong class="${ok ? 'cd-sum-ok' : 'cd-sum-fail'}">${finalRunning}</strong>
+        ${ok ? '<span class="cd-sum-note">✓ passes (must equal 0)</span>' : '<span class="cd-sum-note cd-sum-note--fail">✗ fails (must equal 0)</span>'}
+      </div>
+    `;
+  }
+
+  function renderDammBreakdown(raw: string) {
+    const steps = dammBreakdown(raw);
+    if (!steps.length) {
+      breakdownEl.innerHTML = '';
+      return;
+    }
+
+    const cells = steps
+      .map(
+        (s) =>
+          `<div class="cd-bd-cell">
+            <span class="cd-bd-orig">${s.digit}</span>
+            <span class="cd-bd-arrow">T[${s.prevInterim}][${s.digit}]</span>
+            <span class="cd-bd-val">${s.nextInterim}</span>
+          </div>`,
+      )
+      .join('');
+
+    const last = steps[steps.length - 1];
+    const ok = last.nextInterim === 0;
+    breakdownEl.innerHTML = `
+      <p class="cd-bd-hint">Each cell: digit → table lookup → interim value</p>
+      <div class="cd-bd-grid">${cells}</div>
+      <div class="cd-bd-sum">
+        final interim = <strong class="${ok ? 'cd-sum-ok' : 'cd-sum-fail'}">${last.nextInterim}</strong>
+        ${ok ? '<span class="cd-sum-note">✓ passes (must equal 0)</span>' : '<span class="cd-sum-note cd-sum-note--fail">✗ fails (must equal 0)</span>'}
+      </div>
+    `;
+  }
+
+  function renderIsbn10Breakdown(raw: string) {
+    const steps = isbn10Breakdown(raw);
+    if (!steps.length) {
+      breakdownEl.innerHTML = '';
+      return;
+    }
+
+    const cells = steps
+      .map(
+        (s) =>
+          `<div class="cd-bd-cell cd-bd-cell--isbn">
+            <span class="cd-bd-orig">${s.char}</span>
+            <span class="cd-bd-arrow">×${s.weight}</span>
+            <span class="cd-bd-val">${s.product}</span>
+          </div>`,
+      )
+      .join('');
+
+    const sum = steps.reduce((a, s) => a + s.product, 0);
+    const ok = steps.length === 10 && sum % 11 === 0;
+    const mod = sum % 11;
+    breakdownEl.innerHTML = `
+      <p class="cd-bd-hint">Each cell: character × weight → product (weights 10 down to 1)</p>
+      <div class="cd-bd-grid">${cells}</div>
+      <div class="cd-bd-sum">
+        sum = ${sum} → ${sum} mod 11 = <strong class="${ok ? 'cd-sum-ok' : 'cd-sum-fail'}">${mod}</strong>
+        ${ok ? '<span class="cd-sum-note">✓ passes (must equal 0)</span>' : '<span class="cd-sum-note cd-sum-note--fail">✗ fails (must equal 0)</span>'}
+      </div>
+    `;
+  }
+
+  // ── Compute ───────────────────────────────────────────────────────────────
+  computeBtn.addEventListener('click', () => {
+    const partial = partialInput.value.trim();
+    if (!partial) {
+      computeOutput.innerHTML =
+        '<span class="cd-compute-error">enter a partial number first</span>';
+      return;
+    }
+
+    let result = '';
+    let full = '';
+    let error = '';
+
+    if (currentAlgo === 'verhoeff') {
+      const digits = partial.replace(/\D/g, '');
+      if (!digits) {
+        error = 'enter digits only';
+      } else {
+        result = computeVerhoeffCheckDigit(digits);
+        full = digits + result;
+      }
+    } else if (currentAlgo === 'damm') {
+      const digits = partial.replace(/\D/g, '');
+      if (!digits) {
+        error = 'enter digits only';
+      } else {
+        result = computeDammCheckDigit(digits);
+        full = digits + result;
+      }
+    } else {
+      const digits = partial.replace(/[\s-]/g, '');
+      if (digits.length !== 9 || !/^\d{9}$/.test(digits)) {
+        error = 'ISBN-10 requires exactly 9 digits (the 10th is the check digit)';
+      } else {
+        result = computeIsbn10CheckDigit(digits);
+        full = digits + result;
+      }
+    }
+
+    if (error) {
+      computeOutput.innerHTML = `<span class="cd-compute-error">${error}</span>`;
+      return;
+    }
+
+    computeOutput.innerHTML = `
+      <div class="cd-compute-result">
+        <span class="cd-compute-partial">${currentAlgo === 'isbn10' ? full.slice(0, 9) : full.slice(0, -1)}</span>
+        <span class="cd-compute-check">${result}</span>
+        <button class="action-btn cd-copy-btn" data-value="${full}">copy</button>
+      </div>
+      <p class="cd-compute-hint">check digit: <strong>${result}</strong>${result === 'X' ? ' (= 10)' : ''}</p>
+    `;
+
+    computeOutput.querySelector('.cd-copy-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      await navigator.clipboard.writeText(btn.dataset.value ?? '');
+      btn.textContent = 'copied';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+      }, 1200);
+    });
+  });
+
+  // Init
+  switchAlgo('verhoeff');
+</script>
+
+<style>
+  .cd-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 720px;
+  }
+
+  /* ── Algorithm selector ── */
+  .cd-algo-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .cd-algo-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .cd-algo-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .cd-algo-btn--active {
+    border-color: var(--border-active);
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .cd-algo-desc {
+    font-size: 0.78rem;
+    color: var(--fg-dim);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* ── Sections ── */
+  .cd-section {
+    border: 1px solid var(--border);
+  }
+
+  .cd-section-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cd-section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .cd-section-body {
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* ── Inputs ── */
+  .cd-input-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .cd-input {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    letter-spacing: 0.05em;
+    transition: border-color 0.1s;
+  }
+
+  .cd-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .cd-input::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+    font-size: 0.8rem;
+    letter-spacing: 0;
+  }
+
+  /* ── Badge ── */
+  .cd-badge {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .cd-badge--empty {
+    color: var(--fg-dim);
+  }
+  .cd-badge--valid {
+    border-color: #3a7a3a;
+    color: #7ec87e;
+    background: rgba(80, 180, 80, 0.08);
+  }
+  .cd-badge--invalid {
+    border-color: #7a3a3a;
+    color: #c87e7e;
+    background: rgba(180, 80, 80, 0.08);
+  }
+
+  /* ── Breakdown ── */
+  .cd-breakdown {
+    font-size: 0.75rem;
+  }
+
+  :global(.cd-bd-hint) {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    margin: 0 0 0.5rem;
+    opacity: 0.7;
+  }
+
+  :global(.cd-bd-grid) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+  }
+
+  :global(.cd-bd-cell) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid var(--border);
+    padding: 0.25rem 0.4rem;
+    min-width: 2.8rem;
+    gap: 0.1rem;
+  }
+
+  :global(.cd-bd-cell--isbn) {
+    min-width: 3.2rem;
+  }
+
+  :global(.cd-bd-orig) {
+    font-size: 0.85rem;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  :global(.cd-bd-arrow) {
+    font-size: 0.6rem;
+    color: #7aabcc;
+    white-space: nowrap;
+  }
+
+  :global(.cd-bd-val) {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  :global(.cd-bd-sum) {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  :global(.cd-sum-ok) {
+    color: #7ec87e;
+  }
+  :global(.cd-sum-fail) {
+    color: #c87e7e;
+  }
+  :global(.cd-sum-note) {
+    font-size: 0.7rem;
+    color: #7ec87e;
+  }
+  :global(.cd-sum-note--fail) {
+    color: #c87e7e;
+  }
+
+  /* ── Compute ── */
+  .cd-compute-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .cd-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .cd-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .cd-field .cd-input {
+    font-size: 0.9rem;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .cd-compute-btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+  }
+
+  :global(.cd-compute-output) {
+    min-height: 2.5rem;
+  }
+
+  :global(.cd-compute-result) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    flex-wrap: wrap;
+  }
+
+  :global(.cd-compute-partial) {
+    color: var(--fg-dim);
+  }
+  :global(.cd-compute-check) {
+    color: var(--fg);
+    font-weight: 700;
+  }
+
+  :global(.cd-compute-hint) {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    margin: 0.4rem 0 0;
+  }
+
+  :global(.cd-compute-error) {
+    color: #c87e7e;
+    font-size: 0.75rem;
+  }
+
+  /* ── Footer ── */
+  .cd-note {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .cd-link {
+    color: var(--fg-dim);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.1s;
+  }
+
+  .cd-link:hover {
+    color: var(--fg);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+</style>

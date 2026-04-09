@@ -1,0 +1,916 @@
+---
+// Fully client-side — uses <video> + Canvas + gifenc for GIF encoding
+---
+
+<div class="fe-tool">
+  <input id="fe-file-input" type="file" accept="video/*,.mp4,.webm,.mov,.avi,.mkv" hidden />
+
+  <!-- Upload section -->
+  <div
+    id="fe-upload-zone"
+    class="fe-upload-zone"
+    tabindex="0"
+    role="button"
+    aria-label="Upload video file"
+  >
+    <span class="fe-upload-icon">▶</span>
+    <span class="fe-upload-title">drop a video or click to upload</span>
+    <span class="fe-upload-sub">.mp4 · .webm · .mov · any browser-playable format</span>
+  </div>
+
+  <!-- File info bar -->
+  <div id="fe-info-bar" class="fe-info-bar" hidden>
+    <div class="fe-info-left">
+      <span id="fe-file-name" class="fe-file-name"></span>
+      <span id="fe-file-meta" class="fe-file-meta"></span>
+    </div>
+    <button id="fe-reset-btn" class="action-btn">change file</button>
+  </div>
+
+  <!-- Main workspace -->
+  <div id="fe-workspace" hidden>
+    <!-- Mode toggle -->
+    <div class="fe-mode-bar" role="group" aria-label="Tool mode">
+      <button class="fe-mode-btn fe-mode-btn--active" data-mode="frames" id="fe-mode-frames"
+        >Extract Frames</button
+      >
+      <button class="fe-mode-btn" data-mode="gif" id="fe-mode-gif">Make GIF</button>
+    </div>
+
+    <!-- Video preview -->
+    <section class="fe-section">
+      <div class="fe-section-header">
+        <span class="section-label">preview</span>
+        <span id="fe-time-display" class="fe-time-display">0:00.000</span>
+      </div>
+      <div class="fe-section-body fe-section-body--video">
+        <video id="fe-video" class="fe-video" preload="metadata" muted playsinline></video>
+        <div class="fe-seek-row">
+          <input
+            id="fe-seek"
+            type="range"
+            class="fe-seek"
+            min="0"
+            step="0.001"
+            value="0"
+            aria-label="Seek"
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- Extract Frames mode -->
+    <div id="fe-frames-panel">
+      <section class="fe-section">
+        <div class="fe-section-header">
+          <span class="section-label">capture frame</span>
+        </div>
+        <div class="fe-section-body fe-section-body--capture">
+          <p class="fe-hint">
+            Seek to the desired position and click Capture, or enter a time directly.
+          </p>
+          <div class="fe-capture-row">
+            <div class="fe-field">
+              <label class="fe-label" for="fe-capture-time">Time (seconds)</label>
+              <input
+                id="fe-capture-time"
+                class="fe-input"
+                type="number"
+                min="0"
+                step="0.001"
+                value="0"
+              />
+            </div>
+            <div class="fe-field">
+              <label class="fe-label" for="fe-capture-width">Max width (px, 0 = original)</label>
+              <input
+                id="fe-capture-width"
+                class="fe-input"
+                type="number"
+                min="0"
+                step="1"
+                value="0"
+                placeholder="original"
+              />
+            </div>
+            <button id="fe-capture-btn" class="action-btn primary">capture frame</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Captured frames strip -->
+      <section id="fe-frames-section" class="fe-section" hidden>
+        <div class="fe-section-header">
+          <span class="section-label">captured frames</span>
+          <div class="fe-section-header-right">
+            <span id="fe-frames-count" class="fe-dim-label"></span>
+            <button id="fe-clear-frames-btn" class="action-btn">clear all</button>
+          </div>
+        </div>
+        <div class="fe-section-body fe-section-body--frames">
+          <div id="fe-frames-grid" class="fe-frames-grid"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- GIF mode -->
+    <div id="fe-gif-panel" hidden>
+      <section class="fe-section">
+        <div class="fe-section-header">
+          <span class="section-label">GIF settings</span>
+        </div>
+        <div class="fe-section-body fe-section-body--gif-controls">
+          <div class="fe-gif-grid">
+            <div class="fe-field">
+              <label class="fe-label" for="fe-gif-start">Start (sec)</label>
+              <input
+                id="fe-gif-start"
+                class="fe-input"
+                type="number"
+                min="0"
+                step="0.1"
+                value="0"
+              />
+            </div>
+            <div class="fe-field">
+              <label class="fe-label" for="fe-gif-end">End (sec)</label>
+              <input id="fe-gif-end" class="fe-input" type="number" min="0" step="0.1" value="3" />
+            </div>
+            <div class="fe-field">
+              <label class="fe-label" for="fe-gif-fps">Frame rate (fps)</label>
+              <select id="fe-gif-fps" class="fe-select">
+                <option value="10" selected>10 fps</option>
+                <option value="15">15 fps</option>
+                <option value="24">24 fps</option>
+              </select>
+            </div>
+            <div class="fe-field">
+              <label class="fe-label" for="fe-gif-width">Max width (px)</label>
+              <select id="fe-gif-width" class="fe-select">
+                <option value="320">320px</option>
+                <option value="480" selected>480px</option>
+                <option value="640">640px</option>
+                <option value="800">800px</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="fe-gif-estimate" class="fe-gif-estimate"></div>
+
+          <div class="fe-action-row">
+            <button id="fe-gif-btn" class="action-btn primary">generate gif</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- GIF progress -->
+      <div id="fe-gif-progress" class="fe-gif-progress" hidden>
+        <div class="fe-progress-bar">
+          <div id="fe-progress-fill" class="fe-progress-fill" style="width:0%"></div>
+        </div>
+        <span id="fe-progress-label" class="fe-dim-label">encoding frame 0 / 0</span>
+      </div>
+
+      <!-- GIF output -->
+      <section id="fe-gif-output-section" class="fe-section" hidden>
+        <div class="fe-section-header">
+          <span class="section-label">GIF output</span>
+          <div class="fe-section-header-right">
+            <span id="fe-gif-size" class="fe-dim-label"></span>
+            <button id="fe-gif-download-btn" class="action-btn primary">download gif</button>
+          </div>
+        </div>
+        <div class="fe-section-body fe-section-body--gif-out">
+          <img id="fe-gif-preview" class="fe-gif-preview" alt="Generated GIF preview" />
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Error notice -->
+  <div id="fe-error" class="fe-error" hidden aria-live="polite"></div>
+</div>
+
+<script>
+  import {
+    extractFrame,
+    generateGif,
+    estimateFrameCount,
+    formatFileSize,
+  } from '../../lib/frame-extractor';
+  import type { CapturedFrame } from '../../lib/frame-extractor';
+
+  const MAX_FRAMES_WARNING = 200;
+
+  const uploadZone = document.getElementById('fe-upload-zone') as HTMLDivElement;
+  const fileInput = document.getElementById('fe-file-input') as HTMLInputElement;
+  const infoBar = document.getElementById('fe-info-bar') as HTMLDivElement;
+  const fileNameEl = document.getElementById('fe-file-name') as HTMLSpanElement;
+  const fileMeta = document.getElementById('fe-file-meta') as HTMLSpanElement;
+  const resetBtn = document.getElementById('fe-reset-btn') as HTMLButtonElement;
+  const workspace = document.getElementById('fe-workspace') as HTMLDivElement;
+  const video = document.getElementById('fe-video') as HTMLVideoElement;
+  const seek = document.getElementById('fe-seek') as HTMLInputElement;
+  const timeDisplay = document.getElementById('fe-time-display') as HTMLSpanElement;
+  const errorEl = document.getElementById('fe-error') as HTMLDivElement;
+
+  // Mode
+  const framesPanel = document.getElementById('fe-frames-panel') as HTMLDivElement;
+  const gifPanel = document.getElementById('fe-gif-panel') as HTMLDivElement;
+
+  // Frames mode
+  const captureTimeEl = document.getElementById('fe-capture-time') as HTMLInputElement;
+  const captureWidthEl = document.getElementById('fe-capture-width') as HTMLInputElement;
+  const captureBtn = document.getElementById('fe-capture-btn') as HTMLButtonElement;
+  const framesSection = document.getElementById('fe-frames-section') as HTMLElement;
+  const framesGrid = document.getElementById('fe-frames-grid') as HTMLDivElement;
+  const framesCount = document.getElementById('fe-frames-count') as HTMLSpanElement;
+  const clearFramesBtn = document.getElementById('fe-clear-frames-btn') as HTMLButtonElement;
+
+  // GIF mode
+  const gifStartEl = document.getElementById('fe-gif-start') as HTMLInputElement;
+  const gifEndEl = document.getElementById('fe-gif-end') as HTMLInputElement;
+  const gifFpsEl = document.getElementById('fe-gif-fps') as HTMLSelectElement;
+  const gifWidthEl = document.getElementById('fe-gif-width') as HTMLSelectElement;
+  const gifEstimate = document.getElementById('fe-gif-estimate') as HTMLDivElement;
+  const gifBtn = document.getElementById('fe-gif-btn') as HTMLButtonElement;
+  const gifProgress = document.getElementById('fe-gif-progress') as HTMLDivElement;
+  const progressFill = document.getElementById('fe-progress-fill') as HTMLDivElement;
+  const progressLabel = document.getElementById('fe-progress-label') as HTMLSpanElement;
+  const gifOutputSection = document.getElementById('fe-gif-output-section') as HTMLElement;
+  const gifPreview = document.getElementById('fe-gif-preview') as HTMLImageElement;
+  const gifSize = document.getElementById('fe-gif-size') as HTMLSpanElement;
+  const gifDownloadBtn = document.getElementById('fe-gif-download-btn') as HTMLButtonElement;
+
+  let capturedFrames: CapturedFrame[] = [];
+  let currentGifUrl = '';
+  let videoDuration = 0;
+  let currentFileName = '';
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('fe-upload-zone--drag');
+  });
+
+  uploadZone.addEventListener('dragleave', (e) => {
+    if (!uploadZone.contains(e.relatedTarget as Node)) {
+      uploadZone.classList.remove('fe-upload-zone--drag');
+    }
+  });
+
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('fe-upload-zone--drag');
+    const file = e.dataTransfer?.files[0];
+    if (file) loadFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) loadFile(file);
+  });
+
+  function loadFile(file: File) {
+    errorEl.hidden = true;
+    currentFileName = file.name.replace(/\.[^.]+$/, '');
+
+    const url = URL.createObjectURL(file);
+    video.src = url;
+    video.load();
+
+    video.addEventListener(
+      'loadedmetadata',
+      () => {
+        videoDuration = video.duration;
+        seek.max = String(videoDuration);
+        seek.value = '0';
+        captureTimeEl.max = String(videoDuration);
+        captureTimeEl.value = '0';
+        gifStartEl.max = String(videoDuration);
+        gifEndEl.max = String(videoDuration);
+        gifEndEl.value = String(Math.min(3, videoDuration).toFixed(1));
+
+        fileNameEl.textContent = file.name;
+        fileMeta.textContent = `${formatDuration(videoDuration)} · ${video.videoWidth}×${video.videoHeight} · ${formatFileSize(file.size)}`;
+
+        updateGifEstimate();
+        uploadZone.hidden = true;
+        infoBar.hidden = false;
+        workspace.hidden = false;
+      },
+      { once: true },
+    );
+  }
+
+  resetBtn.addEventListener('click', () => {
+    if (currentGifUrl) URL.revokeObjectURL(currentGifUrl);
+    capturedFrames = [];
+    fileInput.value = '';
+    video.src = '';
+    uploadZone.hidden = false;
+    infoBar.hidden = true;
+    workspace.hidden = true;
+    framesSection.hidden = true;
+    framesGrid.innerHTML = '';
+    gifOutputSection.hidden = true;
+    errorEl.hidden = true;
+  });
+
+  // ── Mode toggle ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.fe-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = (btn as HTMLElement).dataset.mode as 'frames' | 'gif';
+      document
+        .querySelectorAll('.fe-mode-btn')
+        .forEach((b) => b.classList.remove('fe-mode-btn--active'));
+      btn.classList.add('fe-mode-btn--active');
+      framesPanel.hidden = mode !== 'frames';
+      gifPanel.hidden = mode !== 'gif';
+    });
+  });
+
+  // ── Seek bar ──────────────────────────────────────────────────────────────
+  seek.addEventListener('input', () => {
+    video.currentTime = parseFloat(seek.value);
+  });
+
+  video.addEventListener('timeupdate', () => {
+    seek.value = String(video.currentTime);
+    timeDisplay.textContent = formatDuration(video.currentTime);
+    captureTimeEl.value = video.currentTime.toFixed(3);
+  });
+
+  function formatDuration(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = (sec % 60).toFixed(3).padStart(6, '0');
+    return `${m}:${s}`;
+  }
+
+  // ── Capture frame ─────────────────────────────────────────────────────────
+  captureBtn.addEventListener('click', async () => {
+    captureBtn.disabled = true;
+    captureBtn.textContent = 'capturing…';
+    errorEl.hidden = true;
+
+    try {
+      const t = parseFloat(captureTimeEl.value) || 0;
+      const maxW = parseInt(captureWidthEl.value) || 0;
+      const frame = await extractFrame(video, t, maxW);
+      capturedFrames.push(frame);
+      renderFrameStrip();
+    } catch (err) {
+      errorEl.textContent = `Failed to capture frame: ${err instanceof Error ? err.message : String(err)}`;
+      errorEl.hidden = false;
+    } finally {
+      captureBtn.disabled = false;
+      captureBtn.textContent = 'capture frame';
+    }
+  });
+
+  clearFramesBtn.addEventListener('click', () => {
+    capturedFrames = [];
+    framesGrid.innerHTML = '';
+    framesSection.hidden = true;
+  });
+
+  function renderFrameStrip() {
+    framesSection.hidden = false;
+    framesCount.textContent = `${capturedFrames.length} frame${capturedFrames.length !== 1 ? 's' : ''}`;
+    framesGrid.innerHTML = '';
+
+    capturedFrames.forEach((frame, i) => {
+      const url = URL.createObjectURL(frame.blob);
+      const card = document.createElement('div');
+      card.className = 'fe-frame-card';
+
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'fe-frame-img';
+      img.alt = `Frame at ${formatDuration(frame.timeSeconds)}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'fe-frame-meta';
+      meta.textContent = formatDuration(frame.timeSeconds);
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'action-btn fe-frame-dl';
+      dlBtn.textContent = 'download';
+      dlBtn.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFileName}-frame-${i + 1}.png`;
+        a.click();
+      });
+
+      card.appendChild(img);
+      card.appendChild(meta);
+      card.appendChild(dlBtn);
+      framesGrid.appendChild(card);
+    });
+  }
+
+  // ── GIF generation ────────────────────────────────────────────────────────
+  function updateGifEstimate() {
+    const start = parseFloat(gifStartEl.value) || 0;
+    const end = parseFloat(gifEndEl.value) || 0;
+    const fps = parseInt(gifFpsEl.value) || 10;
+    const count = estimateFrameCount(start, end, fps);
+    const warn = count > MAX_FRAMES_WARNING;
+    gifEstimate.innerHTML = `~${count} frames${warn ? ' <span class="fe-warn">— large! Consider reducing duration or fps.</span>' : ''}`;
+  }
+
+  [gifStartEl, gifEndEl, gifFpsEl].forEach((el) => el.addEventListener('input', updateGifEstimate));
+
+  gifBtn.addEventListener('click', async () => {
+    errorEl.hidden = true;
+    gifOutputSection.hidden = true;
+    gifBtn.disabled = true;
+    gifBtn.textContent = 'generating…';
+
+    const start = parseFloat(gifStartEl.value) || 0;
+    const end = Math.min(parseFloat(gifEndEl.value) || 3, videoDuration);
+    const fps = parseInt(gifFpsEl.value) || 10;
+    const maxWidth = parseInt(gifWidthEl.value) || 480;
+
+    if (end <= start) {
+      errorEl.textContent = 'End time must be greater than start time.';
+      errorEl.hidden = false;
+      gifBtn.disabled = false;
+      gifBtn.textContent = 'generate gif';
+      return;
+    }
+
+    gifProgress.hidden = false;
+    progressFill.style.width = '0%';
+
+    try {
+      const gen = generateGif(video, { start, end, fps, maxWidth });
+      let gifBlob: Blob | undefined;
+
+      while (true) {
+        const { value, done } = await gen.next();
+        if (done) {
+          gifBlob = value as Blob;
+          break;
+        }
+        const pct = Math.round((value.current / value.total) * 100);
+        progressFill.style.width = `${pct}%`;
+        progressLabel.textContent = `encoding frame ${value.current} / ${value.total}`;
+      }
+
+      if (gifBlob) {
+        if (currentGifUrl) URL.revokeObjectURL(currentGifUrl);
+        currentGifUrl = URL.createObjectURL(gifBlob);
+        gifPreview.src = currentGifUrl;
+        gifSize.textContent = formatFileSize(gifBlob.size);
+        gifOutputSection.hidden = false;
+
+        gifDownloadBtn.onclick = () => {
+          const a = document.createElement('a');
+          a.href = currentGifUrl;
+          a.download = `${currentFileName}.gif`;
+          a.click();
+        };
+      }
+    } catch (err) {
+      errorEl.textContent = `GIF generation failed: ${err instanceof Error ? err.message : String(err)}`;
+      errorEl.hidden = false;
+    } finally {
+      gifProgress.hidden = true;
+      gifBtn.disabled = false;
+      gifBtn.textContent = 'generate gif';
+    }
+  });
+</script>
+
+<style>
+  .fe-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 860px;
+  }
+
+  /* ── Upload zone ── */
+  .fe-upload-zone {
+    border: 1px dashed var(--border);
+    padding: 2.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      background 0.1s;
+    text-align: center;
+  }
+
+  .fe-upload-zone:hover,
+  .fe-upload-zone:focus,
+  .fe-upload-zone--drag {
+    border-color: var(--border-active);
+    background: rgba(255, 255, 255, 0.03);
+    outline: none;
+  }
+
+  .fe-upload-icon {
+    font-size: 1.75rem;
+    color: var(--fg-dim);
+    line-height: 1;
+  }
+
+  .fe-upload-title {
+    font-size: 0.85rem;
+    color: var(--fg-dim);
+  }
+
+  .fe-upload-sub {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    opacity: 0.6;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Info bar ── */
+  .fe-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .fe-info-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .fe-file-name {
+    font-size: 0.8rem;
+    color: var(--fg);
+  }
+
+  .fe-file-meta {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Mode bar ── */
+  .fe-mode-bar {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .fe-mode-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .fe-mode-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .fe-mode-btn--active {
+    border-color: var(--border-active);
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Sections ── */
+  .fe-section {
+    border: 1px solid var(--border);
+  }
+
+  .fe-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .fe-section-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .fe-section-body {
+    padding: 0.75rem;
+  }
+
+  .fe-section-body--video {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0;
+  }
+
+  .fe-section-body--capture,
+  .fe-section-body--gif-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .fe-section-body--frames {
+    padding: 0.75rem;
+  }
+
+  .fe-section-body--gif-out {
+    padding: 0.75rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .fe-time-display {
+    font-size: 0.7rem;
+    color: #7aabcc;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Video ── */
+  .fe-video {
+    width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+    display: block;
+    background: #0f0f0f;
+  }
+
+  .fe-seek-row {
+    padding: 0.35rem 0.75rem 0.5rem;
+  }
+
+  .fe-seek {
+    width: 100%;
+    accent-color: #7aabcc;
+    cursor: pointer;
+    height: 4px;
+  }
+
+  /* ── Capture controls ── */
+  .fe-hint {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+    margin: 0;
+    opacity: 0.8;
+  }
+
+  .fe-capture-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .fe-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .fe-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .fe-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
+    outline: none;
+    width: 9rem;
+    transition: border-color 0.1s;
+    -moz-appearance: textfield;
+  }
+
+  .fe-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .fe-input::-webkit-inner-spin-button {
+    opacity: 0.4;
+  }
+
+  .fe-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.4rem 1.6rem 0.4rem 0.6rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.1s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+  }
+
+  .fe-select:focus {
+    border-color: var(--border-active);
+  }
+
+  /* ── Frames grid ── */
+  .fe-frames-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }
+
+  :global(.fe-frame-card) {
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  :global(.fe-frame-img) {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: #0f0f0f;
+  }
+
+  :global(.fe-frame-meta) {
+    font-size: 0.6rem;
+    color: var(--fg-dim);
+    padding: 0.3rem 0.4rem;
+    letter-spacing: 0.04em;
+    border-top: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :global(.fe-frame-dl) {
+    border-top: 1px solid var(--border);
+    width: 100%;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  :global(.fe-frame-dl:hover) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  /* ── GIF controls ── */
+  .fe-gif-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .fe-gif-estimate {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+  }
+
+  :global(.fe-warn) {
+    color: #ccab7a;
+  }
+
+  .fe-action-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Progress ── */
+  .fe-gif-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+  }
+
+  .fe-progress-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+  }
+
+  .fe-progress-fill {
+    height: 100%;
+    background: #7aabcc;
+    transition: width 0.2s ease;
+  }
+
+  .fe-dim-label {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── GIF preview ── */
+  .fe-gif-preview {
+    max-width: 100%;
+    max-height: 400px;
+    display: block;
+    border: 1px solid var(--border);
+  }
+
+  .fe-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* ── Error ── */
+  .fe-error {
+    font-size: 0.75rem;
+    color: #c87e7e;
+    border: 1px solid #7a3a3a;
+    padding: 0.5rem 0.75rem;
+    background: rgba(180, 80, 80, 0.06);
+  }
+
+  /* ── Shared ── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .action-btn.primary {
+    color: var(--fg);
+    border-color: #555;
+  }
+
+  .action-btn.primary:hover:not(:disabled) {
+    border-color: var(--border-active);
+  }
+</style>

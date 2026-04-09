@@ -134,6 +134,11 @@ body[data-hint-mode] .tool-card-wrapper[data-hint-key] .tool-card {
   line-height: 1.4;
   pointer-events: none;
   z-index: 10;
+  transition: opacity 0.08s;
+}
+
+.vimium-hint.hint-dimmed {
+  opacity: 0.15;
 }
 
 /* ─── Search highlight marks ─────────────────────────────────────────────────── */

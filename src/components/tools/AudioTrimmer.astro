@@ -1,0 +1,765 @@
+---
+// Fully client-side — uses Web Audio API + Canvas
+---
+
+<div class="at-tool">
+  <!-- Upload section -->
+  <input id="at-file-input" type="file" accept=".mp3,.wav,.ogg,.aac,.flac,.m4a,audio/*" hidden />
+
+  <div
+    id="at-upload-zone"
+    class="at-upload-zone"
+    tabindex="0"
+    role="button"
+    aria-label="Upload audio file"
+  >
+    <span class="at-upload-icon">♪</span>
+    <span class="at-upload-title">drop an audio file or click to upload</span>
+    <span class="at-upload-sub">.mp3 · .wav · .ogg · .aac · .flac · .m4a</span>
+  </div>
+
+  <!-- File info bar -->
+  <div id="at-info-bar" class="at-info-bar" hidden>
+    <div class="at-info-left">
+      <span id="at-file-name" class="at-file-name"></span>
+      <span id="at-file-meta" class="at-file-meta"></span>
+    </div>
+    <button id="at-reset-btn" class="action-btn">change file</button>
+  </div>
+
+  <!-- Waveform section -->
+  <div id="at-waveform-section" class="at-waveform-section" hidden>
+    <section class="at-section">
+      <div class="at-section-header">
+        <span class="section-label">waveform</span>
+        <span id="at-selection-display" class="at-selection-display" aria-live="polite"></span>
+      </div>
+      <div class="at-section-body at-section-body--waveform">
+        <div class="at-waveform-wrap">
+          <canvas id="at-canvas" class="at-canvas" aria-label="Audio waveform"></canvas>
+          <!-- Trim handles -->
+          <div
+            id="at-handle-start"
+            class="at-handle at-handle--start"
+            role="slider"
+            tabindex="0"
+            aria-label="Start trim handle"
+            aria-valuemin="0"
+          >
+          </div>
+          <div
+            id="at-handle-end"
+            class="at-handle at-handle--end"
+            role="slider"
+            tabindex="0"
+            aria-label="End trim handle"
+            aria-valuemax="100"
+          >
+          </div>
+          <!-- Playhead -->
+          <div id="at-playhead" class="at-playhead" hidden></div>
+        </div>
+        <div class="at-time-axis">
+          <span id="at-time-start-label" class="at-time-label">0:00.00</span>
+          <span id="at-time-mid-label" class="at-time-label at-time-label--center"></span>
+          <span id="at-time-end-label" class="at-time-label at-time-label--right"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Trim controls -->
+    <section class="at-section">
+      <div class="at-section-header">
+        <span class="section-label">trim range</span>
+      </div>
+      <div class="at-section-body at-section-body--controls">
+        <div class="at-time-inputs">
+          <div class="at-time-field">
+            <label class="at-label" for="at-start-input">Start (seconds)</label>
+            <input id="at-start-input" class="at-time-input" type="number" min="0" step="0.01" />
+          </div>
+          <div class="at-time-sep">→</div>
+          <div class="at-time-field">
+            <label class="at-label" for="at-end-input">End (seconds)</label>
+            <input id="at-end-input" class="at-time-input" type="number" min="0" step="0.01" />
+          </div>
+          <div class="at-time-field">
+            <label class="at-label">Selection</label>
+            <span id="at-selection-duration" class="at-time-readonly"></span>
+          </div>
+        </div>
+        <div class="at-action-bar">
+          <button id="at-play-btn" class="action-btn primary" aria-label="Play selection"
+            >▷ play selection</button
+          >
+          <button id="at-stop-btn" class="action-btn" hidden aria-label="Stop playback"
+            >◼ stop</button
+          >
+          <button id="at-export-btn" class="action-btn primary">export wav</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Loading indicator -->
+  <div id="at-loading" class="at-loading" hidden aria-live="polite">
+    <span id="at-loading-text">decoding audio…</span>
+  </div>
+
+  <!-- Error notice -->
+  <div id="at-error" class="at-error" hidden aria-live="polite"></div>
+</div>
+
+<script>
+  import {
+    trimBuffer,
+    encodeWav,
+    computePeaks,
+    drawWaveform,
+    getAudioInfo,
+    formatTime,
+  } from '../../lib/audio-trimmer';
+  import type { WaveformPeaks } from '../../lib/audio-trimmer';
+
+  const uploadZone = document.getElementById('at-upload-zone') as HTMLDivElement;
+  const fileInput = document.getElementById('at-file-input') as HTMLInputElement;
+  const infoBar = document.getElementById('at-info-bar') as HTMLDivElement;
+  const fileName = document.getElementById('at-file-name') as HTMLSpanElement;
+  const fileMeta = document.getElementById('at-file-meta') as HTMLSpanElement;
+  const resetBtn = document.getElementById('at-reset-btn') as HTMLButtonElement;
+  const waveformSection = document.getElementById('at-waveform-section') as HTMLDivElement;
+  const canvas = document.getElementById('at-canvas') as HTMLCanvasElement;
+  const handleStart = document.getElementById('at-handle-start') as HTMLDivElement;
+  const handleEnd = document.getElementById('at-handle-end') as HTMLDivElement;
+  const playhead = document.getElementById('at-playhead') as HTMLDivElement;
+  const startInput = document.getElementById('at-start-input') as HTMLInputElement;
+  const endInput = document.getElementById('at-end-input') as HTMLInputElement;
+  const selectionDuration = document.getElementById('at-selection-duration') as HTMLSpanElement;
+  const selectionDisplay = document.getElementById('at-selection-display') as HTMLSpanElement;
+  const playBtn = document.getElementById('at-play-btn') as HTMLButtonElement;
+  const stopBtn = document.getElementById('at-stop-btn') as HTMLButtonElement;
+  const exportBtn = document.getElementById('at-export-btn') as HTMLButtonElement;
+  const loadingEl = document.getElementById('at-loading') as HTMLDivElement;
+  const loadingText = document.getElementById('at-loading-text') as HTMLSpanElement;
+  const errorEl = document.getElementById('at-error') as HTMLDivElement;
+  const timeMidLabel = document.getElementById('at-time-mid-label') as HTMLSpanElement;
+  const timeEndLabel = document.getElementById('at-time-end-label') as HTMLSpanElement;
+
+  let audioBuffer: AudioBuffer | null = null;
+  let peaks: WaveformPeaks | null = null;
+  let duration = 0;
+  let startSec = 0;
+  let endSec = 0;
+  let audioCtx: AudioContext | null = null;
+  let activeSource: AudioBufferSourceNode | null = null;
+  let playStartTime = 0;
+  let playStartOffset = 0;
+  let animFrame = 0;
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('at-upload-zone--drag');
+  });
+
+  uploadZone.addEventListener('dragleave', (e) => {
+    if (!uploadZone.contains(e.relatedTarget as Node)) {
+      uploadZone.classList.remove('at-upload-zone--drag');
+    }
+  });
+
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('at-upload-zone--drag');
+    const file = e.dataTransfer?.files[0];
+    if (file) loadFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) loadFile(file);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    stopPlayback();
+    audioBuffer = null;
+    peaks = null;
+    fileInput.value = '';
+    uploadZone.hidden = false;
+    infoBar.hidden = true;
+    waveformSection.hidden = true;
+    errorEl.hidden = true;
+  });
+
+  async function loadFile(file: File) {
+    errorEl.hidden = true;
+    loadingText.textContent = 'decoding audio…';
+    loadingEl.hidden = false;
+    uploadZone.hidden = true;
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      } else if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+      duration = audioBuffer.duration;
+      startSec = 0;
+      endSec = duration;
+
+      const info = getAudioInfo(audioBuffer, file.size, file.name);
+      fileName.textContent = info.fileName;
+      fileMeta.textContent = `${formatTime(info.duration)} · ${info.sampleRate} Hz · ${info.numberOfChannels}ch · ${(info.fileSize / 1024).toFixed(1)} KB`;
+
+      updateTimeLabels();
+      updateInputs();
+
+      // Compute peaks and render
+      const BINS = Math.min(800, Math.floor(canvas.clientWidth / 2));
+      peaks = computePeaks(audioBuffer, BINS || 400);
+      renderWaveform();
+      updateHandles();
+
+      loadingEl.hidden = true;
+      infoBar.hidden = false;
+      waveformSection.hidden = false;
+    } catch (err) {
+      loadingEl.hidden = true;
+      uploadZone.hidden = false;
+      errorEl.textContent = `Failed to decode audio: ${err instanceof Error ? err.message : 'Unknown error. Check the file format.'}`;
+      errorEl.hidden = false;
+    }
+  }
+
+  // ── Waveform rendering ───────────────────────────────────────────────────
+  function renderWaveform() {
+    if (!peaks) return;
+    drawWaveform(peaks, canvas, startSec, endSec, duration, {
+      primaryColor: '#3a3a3a',
+      dimColor: '#1a1a1a',
+      selectionColor: 'rgba(122,171,204,0.12)',
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    if (!peaks) return;
+    renderWaveform();
+    updateHandles();
+  });
+
+  // ── Handle dragging ──────────────────────────────────────────────────────
+  function pxToSec(px: number): number {
+    const w = canvas.clientWidth;
+    return Math.max(0, Math.min(duration, (px / w) * duration));
+  }
+
+  function secToPct(sec: number): number {
+    return duration > 0 ? (sec / duration) * 100 : 0;
+  }
+
+  function updateHandles() {
+    handleStart.style.left = `${secToPct(startSec)}%`;
+    handleEnd.style.left = `${secToPct(endSec)}%`;
+  }
+
+  function updateInputs() {
+    startInput.value = startSec.toFixed(2);
+    endInput.value = endSec.toFixed(2);
+    startInput.max = String(endSec);
+    endInput.min = String(startSec);
+    endInput.max = String(duration);
+    const dur = endSec - startSec;
+    selectionDuration.textContent = formatTime(dur);
+    selectionDisplay.textContent = `${formatTime(startSec)} → ${formatTime(endSec)} (${formatTime(dur)})`;
+  }
+
+  function updateTimeLabels() {
+    timeMidLabel.textContent = formatTime(duration / 2);
+    timeEndLabel.textContent = formatTime(duration);
+  }
+
+  function clampAndSet(start: number, end: number) {
+    startSec = Math.max(0, Math.min(start, duration));
+    endSec = Math.max(0, Math.min(end, duration));
+    if (startSec > endSec) endSec = startSec;
+    updateHandles();
+    updateInputs();
+    renderWaveform();
+  }
+
+  function makeDraggable(handle: HTMLDivElement, which: 'start' | 'end') {
+    let dragging = false;
+
+    function onMove(e: MouseEvent | TouchEvent) {
+      if (!dragging) return;
+      const rect = canvas.getBoundingClientRect();
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const px = clientX - rect.left;
+      const sec = pxToSec(px);
+      if (which === 'start') {
+        clampAndSet(Math.min(sec, endSec - 0.01), endSec);
+      } else {
+        clampAndSet(startSec, Math.max(sec, startSec + 0.01));
+      }
+    }
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+    });
+    handle.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        dragging = true;
+      },
+      { passive: false },
+    );
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', () => {
+      dragging = false;
+    });
+    document.addEventListener('touchend', () => {
+      dragging = false;
+    });
+
+    // Keyboard nudge
+    handle.addEventListener('keydown', (e) => {
+      const step = 0.1;
+      if (which === 'start') {
+        if (e.key === 'ArrowLeft') clampAndSet(startSec - step, endSec);
+        if (e.key === 'ArrowRight') clampAndSet(Math.min(startSec + step, endSec - 0.01), endSec);
+      } else {
+        if (e.key === 'ArrowLeft') clampAndSet(startSec, Math.max(endSec - step, startSec + 0.01));
+        if (e.key === 'ArrowRight') clampAndSet(startSec, endSec + step);
+      }
+    });
+  }
+
+  makeDraggable(handleStart, 'start');
+  makeDraggable(handleEnd, 'end');
+
+  // Click on waveform to reposition nearest handle
+  canvas.addEventListener('click', (e) => {
+    if (!audioBuffer) return;
+    const rect = canvas.getBoundingClientRect();
+    const sec = pxToSec(e.clientX - rect.left);
+    const dStart = Math.abs(sec - startSec);
+    const dEnd = Math.abs(sec - endSec);
+    if (dStart <= dEnd) {
+      clampAndSet(Math.min(sec, endSec - 0.01), endSec);
+    } else {
+      clampAndSet(startSec, Math.max(sec, startSec + 0.01));
+    }
+  });
+
+  // Numeric inputs
+  startInput.addEventListener('change', () => {
+    const v = parseFloat(startInput.value);
+    if (!isNaN(v)) clampAndSet(v, endSec);
+  });
+
+  endInput.addEventListener('change', () => {
+    const v = parseFloat(endInput.value);
+    if (!isNaN(v)) clampAndSet(startSec, v);
+  });
+
+  // ── Playback ─────────────────────────────────────────────────────────────
+  function stopPlayback() {
+    if (activeSource) {
+      try {
+        activeSource.stop();
+      } catch {
+        /* already stopped */
+      }
+      activeSource = null;
+    }
+    cancelAnimationFrame(animFrame);
+    playhead.hidden = true;
+    playBtn.hidden = false;
+    stopBtn.hidden = true;
+  }
+
+  playBtn.addEventListener('click', async () => {
+    if (!audioBuffer) return;
+    stopPlayback();
+
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+    const trimmed = trimBuffer(audioBuffer, startSec, endSec);
+    const source = audioCtx.createBufferSource();
+    source.buffer = trimmed;
+    source.connect(audioCtx.destination);
+    source.start();
+    source.onended = () => stopPlayback();
+    activeSource = source;
+    playStartTime = audioCtx.currentTime;
+    playStartOffset = startSec;
+
+    playBtn.hidden = true;
+    stopBtn.hidden = false;
+    playhead.hidden = false;
+
+    function tick() {
+      if (!audioCtx || !activeSource) return;
+      const elapsed = audioCtx.currentTime - playStartTime;
+      const currentSec = playStartOffset + elapsed;
+      const pct = secToPct(currentSec);
+      playhead.style.left = `${Math.min(pct, 100)}%`;
+      animFrame = requestAnimationFrame(tick);
+    }
+    animFrame = requestAnimationFrame(tick);
+  });
+
+  stopBtn.addEventListener('click', stopPlayback);
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  exportBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+    const trimmed = trimBuffer(audioBuffer, startSec, endSec);
+    const blob = encodeWav(trimmed);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const baseName = fileName.textContent?.replace(/\.[^.]+$/, '') ?? 'trim';
+    a.download = `${baseName}-trim.wav`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  .at-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 860px;
+  }
+
+  /* ── Upload zone ── */
+  .at-upload-zone {
+    border: 1px dashed var(--border);
+    padding: 2.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      background 0.1s;
+    text-align: center;
+  }
+
+  .at-upload-zone:hover,
+  .at-upload-zone:focus,
+  .at-upload-zone--drag {
+    border-color: var(--border-active);
+    background: rgba(255, 255, 255, 0.03);
+    outline: none;
+  }
+
+  .at-upload-icon {
+    font-size: 1.75rem;
+    color: var(--fg-dim);
+    line-height: 1;
+  }
+
+  .at-upload-title {
+    font-size: 0.85rem;
+    color: var(--fg-dim);
+  }
+
+  .at-upload-sub {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    opacity: 0.6;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Info bar ── */
+  .at-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .at-info-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .at-file-name {
+    font-size: 0.8rem;
+    color: var(--fg);
+  }
+
+  .at-file-meta {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Sections ── */
+  .at-section {
+    border: 1px solid var(--border);
+  }
+
+  .at-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .at-section-body {
+    padding: 0.75rem;
+  }
+
+  .at-section-body--waveform {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .at-section-body--controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .at-selection-display {
+    font-size: 0.68rem;
+    color: #7aabcc;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Waveform ── */
+  .at-waveform-wrap {
+    position: relative;
+    height: 120px;
+  }
+
+  .at-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+  }
+
+  /* ── Trim handles ── */
+  .at-handle {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: #7aabcc;
+    cursor: ew-resize;
+    transform: translateX(-50%);
+    touch-action: none;
+    z-index: 2;
+  }
+
+  .at-handle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -5px;
+    width: 13px;
+    height: 14px;
+    background: #7aabcc;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+
+  .at-handle--end::before {
+    clip-path: polygon(50% 0, 0 100%, 100% 100%);
+    top: auto;
+    bottom: 0;
+  }
+
+  .at-handle:focus {
+    outline: none;
+    background: var(--border-active);
+  }
+
+  .at-handle:focus::before {
+    background: var(--border-active);
+  }
+
+  /* ── Playhead ── */
+  .at-playhead {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* ── Time axis ── */
+  .at-time-axis {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 0 0.25rem;
+  }
+
+  .at-time-label {
+    font-size: 0.6rem;
+    color: var(--fg-dim);
+    opacity: 0.6;
+    letter-spacing: 0.04em;
+  }
+
+  .at-time-label--center {
+    text-align: center;
+  }
+
+  .at-time-label--right {
+    text-align: right;
+  }
+
+  /* ── Trim controls ── */
+  .at-time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .at-time-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .at-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .at-time-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.55rem;
+    outline: none;
+    width: 8rem;
+    transition: border-color 0.1s;
+    -moz-appearance: textfield;
+  }
+
+  .at-time-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .at-time-input::-webkit-inner-spin-button {
+    opacity: 0.4;
+  }
+
+  .at-time-sep {
+    color: var(--fg-dim);
+    margin-top: 1.2rem;
+    font-size: 0.75rem;
+  }
+
+  .at-time-readonly {
+    font-size: 0.85rem;
+    color: #7aabcc;
+    padding: 0.4rem 0;
+  }
+
+  .at-action-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Loading & error ── */
+  .at-loading,
+  .at-error {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .at-loading {
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+  }
+
+  .at-error {
+    color: #c87e7e;
+    border: 1px solid #7a3a3a;
+    background: rgba(180, 80, 80, 0.06);
+  }
+
+  .at-waveform-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* ── Shared ── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    color: var(--fg);
+    border-color: #555;
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+</style>

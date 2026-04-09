@@ -44,7 +44,6 @@ const AAGUID_DB: Record<string, AaguidEntry> = {
     name: 'Android Authenticator with SafetyNet Attestation',
   },
   'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4': { name: 'Google Password Manager' },
-  'adce0002-35bc-c60a-648b-0b25f1f05503': { name: 'Google Chrome' },
   '42b4fb4a-2866-43b2-9bf7-6c6669c2e5d3': { name: 'Google Titan Security Key v2' },
   '0d9b2e56-566b-c393-2940-f821b7f15d6a': { name: 'Google Titan Security Key (USB-A/NFC)' },
 
@@ -59,10 +58,6 @@ const AAGUID_DB: Record<string, AaguidEntry> = {
   // 1Password
   'bada5566-a7aa-401f-bd96-45619a55120d': { name: '1Password' },
   'd548826e-79b4-db40-a3d8-11116f7e8349': { name: '1Password' },
-
-  // Bitwarden
-  'd548826e-79b4-db40-a3d8-11116f7e8349': { name: 'Bitwarden' },
-  'bada5566-a7aa-401f-bd96-45619a55120d': { name: 'Bitwarden' },
 
   // Dashlane
   'fdb141b2-5d84-443e-8a35-4698c205a502': { name: 'Dashlane' },
@@ -112,7 +107,6 @@ const AAGUID_DB: Record<string, AaguidEntry> = {
   'a3975549-7358-4b0a-8612-44e68b463d28': { name: 'Swissbit iShield Key Pro' },
 
   // Android platform
-  'b93fd961-f2e6-462f-b122-82002247de78': { name: 'Android Authenticator (SafetyNet)' },
   '3aa02b48-a02b-4a10-9ee6-4bcb5a60a71a': { name: 'Android Authenticator (StrongBox)' },
 };
 

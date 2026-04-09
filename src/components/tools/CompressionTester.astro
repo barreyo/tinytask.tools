@@ -409,25 +409,25 @@
     border: 1px solid var(--border);
   }
 
-  .ct-card {
+  .ct-cards :global(.ct-card) {
     background: var(--bg);
     display: flex;
     flex-direction: column;
     gap: 0;
   }
 
-  .ct-card--unsupported {
+  .ct-cards :global(.ct-card--unsupported) {
     opacity: 0.45;
   }
 
-  .ct-card--loading .ct-card-body {
+  .ct-cards :global(.ct-card--loading .ct-card-body) {
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 120px;
   }
 
-  .ct-loading {
+  .ct-cards :global(.ct-loading) {
     color: var(--fg-dim);
     font-size: 1.2rem;
     letter-spacing: 0.2em;
@@ -444,7 +444,7 @@
     }
   }
 
-  .ct-card-label {
+  .ct-cards :global(.ct-card-label) {
     font-size: 0.7rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -453,7 +453,7 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .ct-card-body {
+  .ct-cards :global(.ct-card-body) {
     padding: 0.75rem;
     display: flex;
     flex-direction: column;
@@ -461,60 +461,60 @@
     flex: 1;
   }
 
-  .ct-unsupported-msg {
+  .ct-cards :global(.ct-unsupported-msg) {
     font-size: 0.72rem;
     color: var(--fg-dim);
     font-style: italic;
     line-height: 1.4;
   }
 
-  .ct-stat {
+  .ct-cards :global(.ct-stat) {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
   }
 
-  .ct-stat-value {
+  .ct-cards :global(.ct-stat-value) {
     font-size: 1rem;
     color: var(--fg);
     letter-spacing: 0.02em;
     line-height: 1.2;
   }
 
-  .ct-stat-label {
+  .ct-cards :global(.ct-stat-label) {
     font-size: 0.65rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg-dim);
   }
 
-  .ct-pct--great {
+  .ct-cards :global(.ct-pct--great) {
     color: #7ec8a0;
   }
 
-  .ct-pct--ok {
+  .ct-cards :global(.ct-pct--ok) {
     color: #d4a96a;
   }
 
-  .ct-pct--bad {
+  .ct-cards :global(.ct-pct--bad) {
     color: #f07070;
   }
 
   /* ── Compression bar ─────────────────────────────────────────────────────── */
-  .ct-bar-wrap {
+  .ct-cards :global(.ct-bar-wrap) {
     width: 100%;
     height: 3px;
     background: var(--border);
     overflow: hidden;
   }
 
-  .ct-bar {
+  .ct-cards :global(.ct-bar) {
     height: 100%;
     background: var(--fg-dim);
     transition: width 0.3s ease;
   }
 
-  .ct-ratio-text {
+  .ct-cards :global(.ct-ratio-text) {
     font-size: 0.65rem;
     color: var(--fg-dim);
     letter-spacing: 0.04em;
@@ -522,12 +522,12 @@
   }
 
   /* ── Card footer ─────────────────────────────────────────────────────────── */
-  .ct-card-footer {
+  .ct-cards :global(.ct-card-footer) {
     padding: 0.5rem 0.75rem;
     border-top: 1px solid var(--border);
   }
 
-  .ct-dl-btn {
+  .ct-cards :global(.ct-dl-btn) {
     font-size: 0.65rem;
     padding: 0.25rem 0.5rem;
   }

@@ -51,28 +51,15 @@
         >
       </div>
     </div>
-    <div
-      id="jf-output"
-      class="jf-output"
-      aria-live="polite"
-      aria-label="Formatted JSON output"
-      class="p-4"
-    >
+    <div id="jf-output" class="jf-output" aria-live="polite" aria-label="Formatted JSON output">
       <span class="jf-placeholder">formatted output will appear here</span>
     </div>
   </div>
 </div>
 
 <script>
-  import {
-    autoFix,
-    cleanErrorMessage,
-    escapeHtml,
-    extractErrorOffset,
-    highlightJson,
-    offsetToLineCol,
-    renderWithLineNumbers,
-  } from '../../utils/jsonFormatter';
+  import { getDebounceMs } from '../../lib/worker-utils';
+  import type { WorkerResponse } from '../../lib/worker-utils';
 
   // ── Element refs ─────────────────────────────────────────────────────────────
   const inputEl = document.getElementById('jf-input') as HTMLTextAreaElement;
@@ -85,84 +72,67 @@
 
   // ── State ────────────────────────────────────────────────────────────────────
   let formattedJson = '';
+  let currentRequestId: string | null = null;
+
+  // ── Worker setup ─────────────────────────────────────────────────────────────
+  const worker = new Worker(new URL('../../workers/json-formatter.worker.ts', import.meta.url), {
+    type: 'module',
+  });
+
+  worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+    const data = e.data;
+    if (data.id !== currentRequestId) return;
+
+    if (data.ok) {
+      formattedJson = data.formatted;
+      if (formattedJson) {
+        outputEl.innerHTML = data.html;
+        outputEl.classList.remove('jf-output--error');
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
+      } else {
+        outputEl.innerHTML =
+          '<span class="jf-placeholder">formatted output will appear here</span>';
+        outputEl.classList.remove('jf-output--error');
+        copyBtn.disabled = true;
+        downloadBtn.disabled = true;
+      }
+    } else {
+      formattedJson = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      outputEl.innerHTML = data.errorHtml;
+      outputEl.classList.add('jf-output--error');
+
+      const errorLineEl = outputEl.querySelector('.jf-line--error');
+      if (errorLineEl) errorLineEl.scrollIntoView({ block: 'nearest' });
+    }
+  };
 
   // ── Main format/validate function ────────────────────────────────────────────
   function process() {
     const src = inputEl.value;
 
     if (!src.trim()) {
+      currentRequestId = null;
       formattedJson = '';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       outputEl.innerHTML = '<span class="jf-placeholder">formatted output will appear here</span>';
+      outputEl.classList.remove('jf-output--error');
       return;
     }
 
-    // Apply auto-fixes before parsing; fall back to original if fixes break things further
-    const fixed = autoFix(src);
-
-    try {
-      const parsed = JSON.parse(fixed);
-      formattedJson = JSON.stringify(parsed, null, 2);
-
-      const highlightedClean = highlightJson(formattedJson);
-
-      outputEl.innerHTML = `<pre class="jf-pre">${renderWithLineNumbers(highlightedClean, null)}</pre>`;
-      outputEl.classList.remove('jf-output--error');
-      copyBtn.disabled = false;
-      downloadBtn.disabled = false;
-    } catch (err) {
-      formattedJson = '';
-      copyBtn.disabled = true;
-      downloadBtn.disabled = true;
-
-      // Use fixed source for position extraction since that's what was parsed
-      const { message, offset } = extractErrorOffset(fixed, err as SyntaxError);
-
-      if (offset !== null) {
-        const { line: errLine, col: errCol } = offsetToLineCol(fixed, offset);
-        const srcLines = fixed.split('\n');
-
-        const rows: string[] = srcLines.map((rawLine, i) => {
-          const isError = i === errLine;
-          const rowClass = isError ? ' class="jf-line--error"' : '';
-          const lineNum = `<span class="jf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
-          const lineContent = `<span class="jf-lc">${escapeHtml(rawLine) || '\u00a0'}</span>`;
-          let row = `<div${rowClass}>${lineNum}${lineContent}</div>`;
-
-          if (isError) {
-            // Caret row
-            const caretPad = '\u00a0'.repeat(errCol);
-            const caretRow = `<div class="jf-line--caret"><span class="jf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="jf-lc">${caretPad}<span class="jf-caret">^</span></span></div>`;
-            // Error message row
-            const msgRow = `<div class="jf-line--msg"><span class="jf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="jf-lc jf-error-msg">${escapeHtml(cleanErrorMessage(message))}</span></div>`;
-            row += caretRow + msgRow;
-          }
-
-          return row;
-        });
-
-        outputEl.innerHTML = `<pre class="jf-pre">${rows.join('')}</pre>`;
-      } else {
-        // No position info — just show error message
-        outputEl.innerHTML = `<pre class="jf-pre"><div class="jf-line--msg"><span class="jf-lc jf-error-msg">${escapeHtml(cleanErrorMessage(message))}</span></div></pre>`;
-      }
-
-      outputEl.classList.add('jf-output--error');
-
-      // Scroll error line into view
-      const errorLineEl = outputEl.querySelector('.jf-line--error');
-      if (errorLineEl) {
-        errorLineEl.scrollIntoView({ block: 'nearest' });
-      }
-    }
+    const id = crypto.randomUUID();
+    currentRequestId = id;
+    worker.postMessage({ id, src });
   }
 
-  // ── Debounce ─────────────────────────────────────────────────────────────────
+  // ── Adaptive debounce ────────────────────────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout>;
   function debouncedProcess() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(process, 200);
+    debounceTimer = setTimeout(process, getDebounceMs(inputEl.value.length));
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -171,12 +141,13 @@
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      inputEl.value = (e.target?.result as string) ?? '';
+    if (file.size > 500_000) {
+      outputEl.innerHTML = '<span class="jf-placeholder">reading file…</span>';
+    }
+    file.text().then((text) => {
+      inputEl.value = text;
       process();
-    };
-    reader.readAsText(file);
+    });
     fileInput.value = '';
   });
 
@@ -414,6 +385,14 @@
     color: var(--json-error-fg);
     font-size: 0.75rem;
     letter-spacing: 0.02em;
+  }
+
+  :global(.worker-truncation) {
+    padding: 0.4rem 1rem 0.4rem 4.25rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    border-top: 1px solid var(--border);
   }
 
   /* ── Mobile: stack panes vertically ─────────────────────────────────────── */

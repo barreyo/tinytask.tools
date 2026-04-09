@@ -1,0 +1,772 @@
+---
+// Fully client-side
+---
+
+<div class="cc-tool">
+  <!-- Algorithm selector -->
+  <div class="cc-algo-bar" role="group" aria-label="Algorithm">
+    <button class="cc-algo-btn cc-algo-btn--active" data-algo="crc32">CRC-32</button>
+    <button class="cc-algo-btn" data-algo="crc16">CRC-16</button>
+    <button class="cc-algo-btn" data-algo="crc8">CRC-8</button>
+    <button class="cc-algo-btn" data-algo="adler32">Adler-32</button>
+    <button class="cc-algo-btn" data-algo="sum">Checksum</button>
+    <button class="cc-algo-btn" data-algo="parity">Parity</button>
+  </div>
+
+  <p id="cc-algo-desc" class="cc-algo-desc"></p>
+
+  <!-- Input section -->
+  <section class="cc-section">
+    <div class="cc-section-header">
+      <span class="cc-section-label">input</span>
+      <div class="cc-mode-toggle" role="group" aria-label="Input mode">
+        <button class="cc-mode-btn cc-mode-btn--active" data-mode="text">Text</button>
+        <button class="cc-mode-btn" data-mode="hex">Hex bytes</button>
+      </div>
+    </div>
+    <div class="cc-section-body">
+      <textarea
+        id="cc-input"
+        class="cc-textarea"
+        placeholder="Type or paste text here…"
+        spellcheck="false"
+        autocomplete="off"
+        rows="4"
+        aria-label="Input data"></textarea>
+      <p id="cc-input-hint" class="cc-input-hint" hidden>
+        Space-separated hex bytes, e.g. <code>48 65 6C 6C 6F</code>
+      </p>
+      <p id="cc-parse-error" class="cc-parse-error" hidden></p>
+    </div>
+  </section>
+
+  <!-- Output section -->
+  <section class="cc-section">
+    <div class="cc-section-header">
+      <span class="cc-section-label">result</span>
+      <span id="cc-byte-count" class="cc-byte-count"></span>
+    </div>
+    <div class="cc-section-body">
+      <div id="cc-result" class="cc-result-empty" aria-live="polite">
+        <span class="cc-result-placeholder">enter input above</span>
+      </div>
+
+      <!-- Parity detail panel (shown only for parity algo) -->
+      <div id="cc-parity-detail" class="cc-parity-detail" hidden></div>
+    </div>
+  </section>
+
+  <!-- Verify section -->
+  <section class="cc-section">
+    <div class="cc-section-header">
+      <span class="cc-section-label">verify against expected</span>
+    </div>
+    <div class="cc-section-body">
+      <div class="cc-verify-row">
+        <input
+          id="cc-expected"
+          class="cc-input"
+          type="text"
+          placeholder="0xCBF43926 or CBF43926 or 3422552358…"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Expected checksum value"
+        />
+        <div id="cc-verify-badge" class="cc-badge cc-badge--empty" aria-live="polite">—</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  import {
+    textToBytes,
+    hexToBytes,
+    crc32,
+    crc16,
+    crc8,
+    adler32,
+    byteSum8,
+    byteSum16,
+    computeParity,
+    toHex,
+    toBin,
+  } from '../../lib/checksum-crc';
+
+  type Algo = 'crc32' | 'crc16' | 'crc8' | 'adler32' | 'sum' | 'parity';
+  type Mode = 'text' | 'hex';
+
+  interface AlgoMeta {
+    desc: string;
+    outputBits: number;
+    outputBytes: 1 | 2 | 4;
+    label: string;
+  }
+
+  const ALGO_META: Record<Algo, AlgoMeta> = {
+    crc32: {
+      desc: 'CRC-32 (ISO 3309 / PKZIP polynomial 0xEDB88320). Used in ZIP, Ethernet, PNG, and storage systems. Detects burst errors up to 32 bits.',
+      outputBits: 32,
+      outputBytes: 4,
+      label: 'CRC-32',
+    },
+    crc16: {
+      desc: 'CRC-16/XMODEM (polynomial 0x1021, init 0x0000). Used in XMODEM file transfer, Bluetooth, USB, and many embedded protocols.',
+      outputBits: 16,
+      outputBytes: 2,
+      label: 'CRC-16',
+    },
+    crc8: {
+      desc: 'CRC-8/SMBUS (polynomial 0x07). Used in SMBus, I²C, and ATM HEC. Smallest CRC — detects all single-bit errors and many burst errors.',
+      outputBits: 8,
+      outputBytes: 1,
+      label: 'CRC-8',
+    },
+    adler32: {
+      desc: 'Adler-32 (RFC 1950). Used in zlib and PNG. Two running sums mod 65521 — faster than CRC-32 but weaker for small messages.',
+      outputBits: 32,
+      outputBytes: 4,
+      label: 'Adler-32',
+    },
+    sum: {
+      desc: 'Simple byte checksum — sum of all byte values. Fast and trivial to compute, but does not detect transpositions. Output shown in both 8-bit (mod 256) and 16-bit (mod 65536) variants.',
+      outputBits: 16,
+      outputBytes: 2,
+      label: 'Checksum',
+    },
+    parity: {
+      desc: 'Parity bit — XOR of all bits. Detects any single-bit flip but not double-bit errors. Used in RAM error detection, serial protocols (UART), and RAID-5.',
+      outputBits: 1,
+      outputBytes: 1,
+      label: 'Parity',
+    },
+  };
+
+  let currentAlgo: Algo = 'crc32';
+  let currentMode: Mode = 'text';
+  let currentBytes: Uint8Array = new Uint8Array(0);
+  let currentHexValue: number | null = null;
+
+  const algoDesc = document.getElementById('cc-algo-desc') as HTMLParagraphElement;
+  const inputEl = document.getElementById('cc-input') as HTMLTextAreaElement;
+  const inputHint = document.getElementById('cc-input-hint') as HTMLParagraphElement;
+  const parseError = document.getElementById('cc-parse-error') as HTMLParagraphElement;
+  const resultEl = document.getElementById('cc-result') as HTMLDivElement;
+  const parityDetail = document.getElementById('cc-parity-detail') as HTMLDivElement;
+  const byteCount = document.getElementById('cc-byte-count') as HTMLSpanElement;
+  const expectedInput = document.getElementById('cc-expected') as HTMLInputElement;
+  const verifyBadge = document.getElementById('cc-verify-badge') as HTMLDivElement;
+
+  // ── Algorithm selector ────────────────────────────────────────────────────
+  document.querySelectorAll('.cc-algo-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentAlgo = (btn as HTMLElement).dataset.algo as Algo;
+      document
+        .querySelectorAll('.cc-algo-btn')
+        .forEach((b) => b.classList.toggle('cc-algo-btn--active', b === btn));
+      algoDesc.textContent = ALGO_META[currentAlgo].desc;
+      expectedInput.value = '';
+      updateVerifyBadge();
+      compute();
+    });
+  });
+
+  // ── Mode selector ─────────────────────────────────────────────────────────
+  document.querySelectorAll('.cc-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentMode = (btn as HTMLElement).dataset.mode as Mode;
+      document
+        .querySelectorAll('.cc-mode-btn')
+        .forEach((b) => b.classList.toggle('cc-mode-btn--active', b === btn));
+      inputEl.placeholder =
+        currentMode === 'text' ? 'Type or paste text here…' : 'e.g. 48 65 6C 6C 6F';
+      inputHint.hidden = currentMode === 'text';
+      inputEl.value = '';
+      compute();
+    });
+  });
+
+  // ── Compute ───────────────────────────────────────────────────────────────
+  inputEl.addEventListener('input', compute);
+  expectedInput.addEventListener('input', updateVerifyBadge);
+
+  function parseInput(): Uint8Array | null {
+    const raw = inputEl.value;
+    if (currentMode === 'text') {
+      parseError.hidden = true;
+      return textToBytes(raw);
+    }
+    if (!raw.trim()) {
+      parseError.hidden = true;
+      return new Uint8Array(0);
+    }
+    const bytes = hexToBytes(raw);
+    if (bytes === null) {
+      parseError.textContent = 'Invalid hex — enter space-separated bytes like 4F 2A 1B';
+      parseError.hidden = false;
+      return null;
+    }
+    parseError.hidden = true;
+    return bytes;
+  }
+
+  function compute() {
+    const bytes = parseInput();
+    if (bytes === null) {
+      currentBytes = new Uint8Array(0);
+      currentHexValue = null;
+      renderEmpty();
+      updateVerifyBadge();
+      return;
+    }
+
+    currentBytes = bytes;
+    byteCount.textContent = bytes.length === 1 ? '1 byte' : `${bytes.length} bytes`;
+
+    if (currentAlgo === 'parity') {
+      renderParity(bytes);
+      currentHexValue = null;
+    } else if (currentAlgo === 'sum') {
+      renderSum(bytes);
+    } else {
+      let value = 0;
+      if (currentAlgo === 'crc32') value = crc32(bytes);
+      else if (currentAlgo === 'crc16') value = crc16(bytes);
+      else if (currentAlgo === 'crc8') value = crc8(bytes);
+      else if (currentAlgo === 'adler32') value = adler32(bytes);
+      currentHexValue = value;
+      renderSingleValue(value, ALGO_META[currentAlgo]);
+    }
+
+    updateVerifyBadge();
+  }
+
+  function renderEmpty() {
+    resultEl.className = 'cc-result-empty';
+    resultEl.innerHTML = '<span class="cc-result-placeholder">enter input above</span>';
+    parityDetail.hidden = true;
+    byteCount.textContent = '';
+  }
+
+  function renderSingleValue(value: number, meta: AlgoMeta) {
+    parityDetail.hidden = true;
+    const hexStr = toHex(value, meta.outputBytes);
+    const binStr = toBin(value, meta.outputBits);
+    resultEl.className = 'cc-result';
+    resultEl.innerHTML = `
+      <div class="cc-result-primary">
+        <span class="cc-result-label">${meta.label}</span>
+        <span class="cc-result-hex">${hexStr}</span>
+        <button class="action-btn cc-copy-btn" data-value="${hexStr}">copy</button>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">decimal</span>
+        <span class="cc-result-val">${value}</span>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">binary</span>
+        <span class="cc-result-val cc-result-mono">${binStr}</span>
+      </div>
+    `;
+    resultEl.querySelector('.cc-copy-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      await navigator.clipboard.writeText(btn.dataset.value ?? '');
+      btn.textContent = 'copied';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+      }, 1200);
+    });
+  }
+
+  function renderSum(bytes: Uint8Array) {
+    parityDetail.hidden = true;
+    const s8 = byteSum8(bytes);
+    const s16 = byteSum16(bytes);
+    currentHexValue = s16;
+    resultEl.className = 'cc-result';
+    resultEl.innerHTML = `
+      <div class="cc-result-row cc-result-row--header">
+        <span class="cc-result-sublabel">variant</span>
+        <span class="cc-result-sublabel">hex</span>
+        <span class="cc-result-sublabel">decimal</span>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">8-bit (mod 256)</span>
+        <span class="cc-result-val">${toHex(s8, 1)}</span>
+        <span class="cc-result-val">${s8}</span>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">16-bit (mod 65536)</span>
+        <span class="cc-result-val">${toHex(s16, 2)}</span>
+        <span class="cc-result-val">${s16}</span>
+      </div>
+    `;
+  }
+
+  function renderParity(bytes: Uint8Array) {
+    const p = computeParity(bytes);
+    resultEl.className = 'cc-result';
+    resultEl.innerHTML = `
+      <div class="cc-result-primary">
+        <span class="cc-result-label">Even parity bit</span>
+        <span class="cc-result-hex">${p.evenParityBit}</span>
+        <span class="cc-result-label" style="margin-left:1.5rem;">Odd parity bit</span>
+        <span class="cc-result-hex">${p.oddParityBit}</span>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">total 1-bits</span>
+        <span class="cc-result-val">${p.totalOnes}</span>
+      </div>
+      <div class="cc-result-row">
+        <span class="cc-result-sublabel">XOR of all bytes</span>
+        <span class="cc-result-val">${toHex(p.xorByte, 1)} (${toBin(p.xorByte, 8)})</span>
+      </div>
+    `;
+
+    if (p.bytesBinary.length > 0) {
+      parityDetail.hidden = false;
+      const rows = p.bytesBinary
+        .map(
+          (b, i) =>
+            `<div class="cc-parity-row">
+              <span class="cc-parity-idx">${i.toString(16).padStart(2, '0').toUpperCase()}</span>
+              <span class="cc-parity-bits">${b}</span>
+              <span class="cc-parity-ones">${b.split('1').length - 1}</span>
+            </div>`,
+        )
+        .join('');
+      const truncated =
+        currentBytes.length > 64
+          ? `<p class="cc-parity-trunc">Showing first 64 of ${currentBytes.length} bytes</p>`
+          : '';
+      parityDetail.innerHTML = `
+        <div class="cc-parity-header">
+          <span class="cc-parity-idx">idx</span>
+          <span class="cc-parity-bits">binary (8 bits)</span>
+          <span class="cc-parity-ones">1s</span>
+        </div>
+        <div class="cc-parity-rows">${rows}</div>
+        ${truncated}
+      `;
+    } else {
+      parityDetail.hidden = true;
+    }
+  }
+
+  // ── Verify ────────────────────────────────────────────────────────────────
+  function updateVerifyBadge() {
+    const raw = expectedInput.value.trim();
+    if (!raw || currentHexValue === null) {
+      verifyBadge.textContent = '—';
+      verifyBadge.className = 'cc-badge cc-badge--empty';
+      return;
+    }
+
+    // Parse expected: accept "0x..." hex, plain hex, or decimal
+    let expected: number | null = null;
+    const stripped = raw.replace(/^0x/i, '');
+    if (/^[0-9a-fA-F]+$/.test(stripped)) {
+      expected = parseInt(stripped, 16);
+    } else if (/^\d+$/.test(raw)) {
+      expected = parseInt(raw, 10);
+    }
+
+    if (expected === null) {
+      verifyBadge.textContent = '?';
+      verifyBadge.className = 'cc-badge cc-badge--empty';
+      return;
+    }
+
+    const matches = expected === currentHexValue;
+    verifyBadge.textContent = matches ? 'match' : 'mismatch';
+    verifyBadge.className = `cc-badge ${matches ? 'cc-badge--valid' : 'cc-badge--invalid'}`;
+  }
+
+  // Init
+  algoDesc.textContent = ALGO_META[currentAlgo].desc;
+</script>
+
+<style>
+  .cc-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 760px;
+  }
+
+  /* ── Algorithm selector ── */
+  .cc-algo-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .cc-algo-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .cc-algo-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .cc-algo-btn--active {
+    border-color: var(--border-active);
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .cc-algo-desc {
+    font-size: 0.78rem;
+    color: var(--fg-dim);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* ── Sections ── */
+  .cc-section {
+    border: 1px solid var(--border);
+  }
+
+  .cc-section-header {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    justify-content: space-between;
+  }
+
+  .cc-section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    flex-shrink: 0;
+  }
+
+  .cc-section-body {
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* ── Mode toggle ── */
+  .cc-mode-toggle {
+    display: flex;
+    gap: 0;
+  }
+
+  .cc-mode-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .cc-mode-btn + .cc-mode-btn {
+    border-left: none;
+  }
+
+  .cc-mode-btn:hover {
+    color: var(--fg);
+  }
+
+  .cc-mode-btn--active {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fg);
+  }
+
+  /* ── Byte counter ── */
+  .cc-byte-count {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    opacity: 0.7;
+  }
+
+  /* ── Textarea ── */
+  .cc-textarea {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    padding: 0.6rem 0.75rem;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.1s;
+    line-height: 1.5;
+  }
+
+  .cc-textarea:focus {
+    border-color: var(--border-active);
+  }
+
+  .cc-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+    font-size: 0.8rem;
+    font-family: inherit;
+  }
+
+  /* ── Input hints ── */
+  .cc-input-hint {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    margin: 0;
+    opacity: 0.8;
+  }
+
+  .cc-input-hint code {
+    font-family: var(--font-mono, monospace);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.05rem 0.3rem;
+  }
+
+  .cc-parse-error {
+    font-size: 0.72rem;
+    color: #c87e7e;
+    margin: 0;
+  }
+
+  /* ── Result panel ── */
+  .cc-result-empty {
+    display: flex;
+    align-items: center;
+    min-height: 3.5rem;
+  }
+
+  .cc-result-placeholder {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    opacity: 0.5;
+  }
+
+  :global(.cc-result) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  :global(.cc-result-primary) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  :global(.cc-result-label) {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  :global(.cc-result-hex) {
+    font-size: 1.25rem;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  :global(.cc-result-row) {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.78rem;
+  }
+
+  :global(.cc-result-row--header) {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.25rem;
+    margin-bottom: 0.1rem;
+  }
+
+  :global(.cc-result-sublabel) {
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+    min-width: 140px;
+  }
+
+  :global(.cc-result-val) {
+    color: var(--fg);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.82rem;
+  }
+
+  :global(.cc-result-mono) {
+    word-break: break-all;
+    font-size: 0.75rem;
+  }
+
+  /* ── Parity detail ── */
+  .cc-parity-detail {
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    max-height: 16rem;
+    overflow-y: auto;
+  }
+
+  :global(.cc-parity-header) {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 2rem;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    position: sticky;
+    top: 0;
+    background: var(--bg, #111);
+  }
+
+  :global(.cc-parity-rows) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(.cc-parity-row) {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 2rem;
+    gap: 0.5rem;
+    padding: 0.2rem 0.6rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  }
+
+  :global(.cc-parity-row:last-child) {
+    border-bottom: none;
+  }
+
+  :global(.cc-parity-idx) {
+    font-family: var(--font-mono, monospace);
+    color: var(--fg-dim);
+    font-size: 0.7rem;
+  }
+
+  :global(.cc-parity-bits) {
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.12em;
+    color: var(--fg);
+  }
+
+  :global(.cc-parity-ones) {
+    font-family: var(--font-mono, monospace);
+    color: var(--fg-dim);
+    text-align: right;
+  }
+
+  :global(.cc-parity-trunc) {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    margin: 0.4rem 0.6rem;
+    opacity: 0.7;
+  }
+
+  /* ── Verify ── */
+  .cc-verify-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .cc-input {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.9rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+
+  .cc-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .cc-input::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.5;
+    font-size: 0.75rem;
+    font-family: inherit;
+    letter-spacing: 0;
+  }
+
+  /* ── Badge ── */
+  .cc-badge {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 72px;
+    text-align: center;
+  }
+
+  .cc-badge--empty {
+    color: var(--fg-dim);
+  }
+  .cc-badge--valid {
+    border-color: #3a7a3a;
+    color: #7ec87e;
+    background: rgba(80, 180, 80, 0.08);
+  }
+  .cc-badge--invalid {
+    border-color: #7a3a3a;
+    color: #c87e7e;
+    background: rgba(180, 80, 80, 0.08);
+  }
+
+  /* ── Action button ── */
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  :global(.cc-copy-btn) {
+    flex-shrink: 0;
+  }
+</style>

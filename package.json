@@ -24,6 +24,7 @@
     "@types/papaparse": "^5.5.2",
     "astro": "^6.1.4",
     "diff": "^8.0.4",
+    "gifenc": "^1.0.3",
     "js-yaml": "^4.1.1",
     "papaparse": "^5.5.3",
     "qr-code-styling": "^1.9.2",

@@ -1,0 +1,664 @@
+---
+// Fully client-side
+---
+
+<div class="iso-tool">
+  <!-- Input section -->
+  <section class="iso-section">
+    <div class="iso-section-header">
+      <span class="section-label">bitmap hex string</span>
+      <div class="iso-header-actions">
+        <button id="iso-sample-btn" class="action-btn">sample</button>
+        <button id="iso-clear-btn" class="action-btn">clear</button>
+      </div>
+    </div>
+    <div class="iso-section-body">
+      <input
+        id="iso-hex-input"
+        class="iso-hex-input"
+        type="text"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="e.g. 7230054128C28805 or 32-char for primary+secondary"
+        maxlength="38"
+        aria-label="ISO 8583 bitmap hex string"
+      />
+      <p class="iso-hint">
+        16 hex chars = 64-bit primary bitmap &nbsp;·&nbsp; 32 hex chars = 128-bit primary +
+        secondary &nbsp;·&nbsp; spaces are ignored
+      </p>
+    </div>
+  </section>
+
+  <!-- Error notice -->
+  <div id="iso-error" class="iso-error" hidden aria-live="polite"></div>
+
+  <!-- Bitmap grid output -->
+  <div id="iso-output" hidden>
+    <!-- Primary bitmap -->
+    <section class="iso-section">
+      <div class="iso-section-header">
+        <span class="section-label"
+          >primary bitmap <span class="iso-label-dim">(bits 1–64)</span></span
+        >
+        <span id="iso-primary-count" class="iso-count-badge"></span>
+      </div>
+      <div class="iso-section-body iso-section-body--grid">
+        <div id="iso-primary-grid" class="iso-grid" role="grid" aria-label="Primary bitmap grid">
+        </div>
+      </div>
+    </section>
+
+    <!-- Secondary bitmap (shown only if bit 1 is set) -->
+    <section id="iso-secondary-section" class="iso-section" hidden>
+      <div class="iso-section-header">
+        <span class="section-label"
+          >secondary bitmap <span class="iso-label-dim">(bits 65–128)</span></span
+        >
+        <span id="iso-secondary-count" class="iso-count-badge"></span>
+      </div>
+      <div class="iso-section-body iso-section-body--grid">
+        <div
+          id="iso-secondary-grid"
+          class="iso-grid"
+          role="grid"
+          aria-label="Secondary bitmap grid"
+        >
+        </div>
+      </div>
+    </section>
+
+    <!-- Detail panel -->
+    <div id="iso-detail" class="iso-detail" hidden aria-live="polite">
+      <div class="iso-detail-inner">
+        <div class="iso-detail-bit-badge" id="iso-detail-bit"></div>
+        <div class="iso-detail-body">
+          <div class="iso-detail-name" id="iso-detail-name"></div>
+          <div class="iso-detail-desc" id="iso-detail-desc"></div>
+          <div class="iso-detail-meta">
+            <span>type: <code id="iso-detail-type"></code></span>
+            <span>max length: <code id="iso-detail-maxlen"></code></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active fields table -->
+    <section class="iso-section">
+      <div class="iso-section-header">
+        <span class="section-label">active fields</span>
+        <div class="iso-header-actions">
+          <button id="iso-copy-text-btn" class="action-btn">copy as text</button>
+          <button id="iso-copy-json-btn" class="action-btn">copy as json</button>
+        </div>
+      </div>
+      <div class="iso-section-body iso-section-body--table">
+        <table class="iso-table" aria-label="Active ISO 8583 fields">
+          <thead>
+            <tr>
+              <th>Bit</th>
+              <th>Field Name</th>
+              <th>Type</th>
+              <th>Max Len</th>
+            </tr>
+          </thead>
+          <tbody id="iso-table-body"></tbody>
+        </table>
+        <p id="iso-no-fields" class="iso-empty" hidden>No bits are set.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  import { parseBitmap, getActiveFields, ISO8583_FIELDS } from '../../lib/iso8583-bitmap';
+  import type { ActiveField } from '../../lib/iso8583-bitmap';
+
+  const SAMPLE = '7230054128C28805';
+
+  const hexInput = document.getElementById('iso-hex-input') as HTMLInputElement;
+  const sampleBtn = document.getElementById('iso-sample-btn') as HTMLButtonElement;
+  const clearBtn = document.getElementById('iso-clear-btn') as HTMLButtonElement;
+  const errorEl = document.getElementById('iso-error') as HTMLDivElement;
+  const outputEl = document.getElementById('iso-output') as HTMLDivElement;
+  const primaryGrid = document.getElementById('iso-primary-grid') as HTMLDivElement;
+  const primaryCount = document.getElementById('iso-primary-count') as HTMLSpanElement;
+  const secondarySection = document.getElementById('iso-secondary-section') as HTMLElement;
+  const secondaryGrid = document.getElementById('iso-secondary-grid') as HTMLDivElement;
+  const secondaryCount = document.getElementById('iso-secondary-count') as HTMLSpanElement;
+  const detailEl = document.getElementById('iso-detail') as HTMLDivElement;
+  const detailBit = document.getElementById('iso-detail-bit') as HTMLDivElement;
+  const detailName = document.getElementById('iso-detail-name') as HTMLDivElement;
+  const detailDesc = document.getElementById('iso-detail-desc') as HTMLDivElement;
+  const detailType = document.getElementById('iso-detail-type') as HTMLElement;
+  const detailMaxLen = document.getElementById('iso-detail-maxlen') as HTMLElement;
+  const tableBody = document.getElementById('iso-table-body') as HTMLTableSectionElement;
+  const noFields = document.getElementById('iso-no-fields') as HTMLParagraphElement;
+  const copyTextBtn = document.getElementById('iso-copy-text-btn') as HTMLButtonElement;
+  const copyJsonBtn = document.getElementById('iso-copy-json-btn') as HTMLButtonElement;
+
+  let currentActiveFields: ActiveField[] = [];
+
+  function buildGrid(bits: boolean[], offset: number, container: HTMLDivElement) {
+    container.innerHTML = '';
+    bits.forEach((active, i) => {
+      const bit = offset + i + 1;
+      const def = ISO8583_FIELDS[bit];
+      const cell = document.createElement('button');
+      cell.className = `iso-cell ${active ? 'iso-cell--active' : 'iso-cell--inactive'}`;
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute(
+        'aria-label',
+        `Bit ${bit}${def ? ': ' + def.name : ''}${active ? ' (set)' : ' (not set)'}`,
+      );
+      cell.dataset.bit = String(bit);
+
+      const bitNum = document.createElement('span');
+      bitNum.className = 'iso-cell-bit';
+      bitNum.textContent = String(bit);
+      cell.appendChild(bitNum);
+
+      if (active && def) {
+        const abbr = document.createElement('span');
+        abbr.className = 'iso-cell-abbr';
+        abbr.textContent = getAbbr(def.name);
+        cell.appendChild(abbr);
+      }
+
+      cell.addEventListener('mouseenter', () => showDetail(bit, active));
+      cell.addEventListener('focus', () => showDetail(bit, active));
+      cell.addEventListener('mouseleave', hideDetail);
+      cell.addEventListener('blur', hideDetail);
+      cell.addEventListener('click', () => showDetail(bit, active));
+
+      container.appendChild(cell);
+    });
+  }
+
+  function getAbbr(name: string): string {
+    const abbrs: Record<string, string> = {
+      'Secondary Bitmap': 'SEC',
+      'Primary Account Number (PAN)': 'PAN',
+      'Processing Code': 'PC',
+      'Amount, Transaction': 'AMT',
+      'Amount, Settlement': 'SAMI',
+      'Transmission Date & Time': 'DT',
+      'Systems Trace Audit Number (STAN)': 'STAN',
+      'Local Transaction Time': 'TIME',
+      'Local Transaction Date': 'DATE',
+      'Expiration Date': 'EXP',
+      'Merchant Category Code (MCC)': 'MCC',
+      'Point of Service Entry Mode': 'POS',
+      'Network International Identifier (NII)': 'NII',
+      'Track 2 Data': 'TK2',
+      'Track 1 Data': 'TK1',
+      'Retrieval Reference Number': 'RRN',
+      'Authorization Identification Response': 'AUTH',
+      'Response Code': 'RC',
+      'Card Acceptor Terminal ID': 'TERM',
+      'Card Acceptor ID Code': 'CACC',
+      'Card Acceptor Name/Location': 'MNAME',
+      'Currency Code, Transaction': 'CCY',
+      'PIN Data': 'PIN',
+      'ICC Data (EMV)': 'EMV',
+      'Message Authentication Code (MAC)': 'MAC',
+      'MAC, Secondary Bitmap': 'MAC2',
+      'Network Management Info Code': 'NETM',
+      'Original Data Elements': 'ORIG',
+    };
+    return (
+      abbrs[name] ??
+      name
+        .split(/[\s,/()-]+/)
+        .map((w) => w[0])
+        .filter(Boolean)
+        .join('')
+        .toUpperCase()
+        .slice(0, 4)
+    );
+  }
+
+  function showDetail(bit: number, active: boolean) {
+    const def = ISO8583_FIELDS[bit];
+    if (!def) return;
+    detailBit.textContent = `Bit ${bit}`;
+    detailBit.className = `iso-detail-bit-badge ${active ? 'iso-detail-bit-badge--active' : 'iso-detail-bit-badge--inactive'}`;
+    detailName.textContent = def.name;
+    detailDesc.textContent = def.description;
+    detailType.textContent = def.type;
+    detailMaxLen.textContent = def.maxLength === 999 ? 'variable' : String(def.maxLength);
+    detailEl.hidden = false;
+  }
+
+  function hideDetail() {
+    detailEl.hidden = true;
+  }
+
+  function renderTable(fields: ActiveField[]) {
+    currentActiveFields = fields;
+    if (!fields.length) {
+      tableBody.innerHTML = '';
+      noFields.hidden = false;
+      return;
+    }
+    noFields.hidden = true;
+    tableBody.innerHTML = fields
+      .map(
+        (f) => `
+      <tr>
+        <td class="iso-td-bit">${f.bit}</td>
+        <td class="iso-td-name">${f.name}</td>
+        <td class="iso-td-type"><code>${f.type}</code></td>
+        <td class="iso-td-len">${f.maxLength === 999 ? 'var' : f.maxLength}</td>
+      </tr>
+    `,
+      )
+      .join('');
+  }
+
+  function process(hex: string) {
+    errorEl.hidden = true;
+    outputEl.hidden = true;
+
+    if (!hex.trim()) return;
+
+    const result = parseBitmap(hex);
+
+    if (result.error) {
+      errorEl.textContent = result.error;
+      errorEl.hidden = false;
+      return;
+    }
+
+    buildGrid(result.primary, 0, primaryGrid);
+    const primaryActive = result.primary.filter(Boolean).length;
+    primaryCount.textContent = `${primaryActive} bit${primaryActive !== 1 ? 's' : ''} set`;
+
+    if (result.secondary) {
+      buildGrid(result.secondary, 64, secondaryGrid);
+      const secActive = result.secondary.filter(Boolean).length;
+      secondaryCount.textContent = `${secActive} bit${secActive !== 1 ? 's' : ''} set`;
+      secondarySection.hidden = false;
+    } else {
+      secondarySection.hidden = true;
+    }
+
+    const active = getActiveFields(result);
+    renderTable(active);
+    outputEl.hidden = false;
+  }
+
+  hexInput.addEventListener('input', () => process(hexInput.value));
+
+  sampleBtn.addEventListener('click', () => {
+    hexInput.value = SAMPLE;
+    process(SAMPLE);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    hexInput.value = '';
+    errorEl.hidden = true;
+    outputEl.hidden = true;
+    detailEl.hidden = true;
+  });
+
+  async function copyText(btn: HTMLButtonElement, text: string) {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = 'copied';
+    setTimeout(() => {
+      btn.textContent = orig;
+    }, 1200);
+  }
+
+  copyTextBtn.addEventListener('click', () => {
+    const text = currentActiveFields.map((f) => `Bit ${f.bit}: ${f.name}`).join('\n');
+    copyText(copyTextBtn, text);
+  });
+
+  copyJsonBtn.addEventListener('click', () => {
+    const json = JSON.stringify(
+      currentActiveFields.map((f) => ({
+        bit: f.bit,
+        name: f.name,
+        type: f.type,
+        maxLength: f.maxLength,
+      })),
+      null,
+      2,
+    );
+    copyText(copyJsonBtn, json);
+  });
+</script>
+
+<style>
+  .iso-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 860px;
+  }
+
+  /* ── Sections ── */
+  .iso-section {
+    border: 1px solid var(--border);
+  }
+
+  .iso-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .iso-section-body {
+    padding: 0.875rem 0.75rem;
+  }
+
+  .iso-section-body--grid {
+    padding: 0.75rem;
+  }
+
+  .iso-section-body--table {
+    padding: 0;
+    overflow-x: auto;
+  }
+
+  .iso-header-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .iso-label-dim {
+    color: var(--fg-dim);
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+  }
+
+  .iso-count-badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+    flex-shrink: 0;
+  }
+
+  /* ── Input ── */
+  .iso-hex-input {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    letter-spacing: 0.1em;
+    transition: border-color 0.1s;
+  }
+
+  .iso-hex-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .iso-hex-input::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+  }
+
+  .iso-hint {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    margin: 0.5rem 0 0;
+    opacity: 0.7;
+  }
+
+  /* ── Error ── */
+  .iso-error {
+    font-size: 0.75rem;
+    color: #c87e7e;
+    border: 1px solid #7a3a3a;
+    padding: 0.5rem 0.75rem;
+    background: rgba(180, 80, 80, 0.06);
+  }
+
+  /* ── Grid ── */
+  .iso-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 3px;
+  }
+
+  .iso-grid :global(.iso-cell) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    padding: 0.25rem 0.1rem;
+    gap: 0.15rem;
+    font-family: inherit;
+    background: none;
+    transition:
+      border-color 0.1s,
+      background 0.1s;
+    min-width: 0;
+  }
+
+  .iso-grid :global(.iso-cell:hover),
+  .iso-grid :global(.iso-cell:focus) {
+    border-color: var(--border-active);
+    outline: none;
+    z-index: 1;
+  }
+
+  .iso-grid :global(.iso-cell--active) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: #555;
+  }
+
+  .iso-grid :global(.iso-cell--active:hover),
+  .iso-grid :global(.iso-cell--active:focus) {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--border-active);
+  }
+
+  .iso-grid :global(.iso-cell--inactive) {
+    opacity: 0.35;
+  }
+
+  .iso-grid :global(.iso-cell-bit) {
+    font-size: 0.6rem;
+    color: var(--fg-dim);
+    line-height: 1;
+  }
+
+  .iso-grid :global(.iso-cell--active .iso-cell-bit) {
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .iso-grid :global(.iso-cell-abbr) {
+    font-size: 0.42rem;
+    letter-spacing: 0.02em;
+    color: #7aabcc;
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  /* ── Detail panel ── */
+  .iso-detail {
+    border: 1px solid var(--border);
+  }
+
+  .iso-detail-inner {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .iso-detail-bit-badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 3.5rem;
+    text-align: center;
+  }
+
+  .iso-detail-bit-badge--active {
+    border-color: #555;
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .iso-detail-bit-badge--inactive {
+    color: var(--fg-dim);
+  }
+
+  .iso-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .iso-detail-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .iso-detail-desc {
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+
+  .iso-detail-meta {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    flex-wrap: wrap;
+  }
+
+  .iso-detail-meta code {
+    color: #7aabcc;
+    font-family: inherit;
+  }
+
+  /* ── Table ── */
+  .iso-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+
+  .iso-table th {
+    text-align: left;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  :global(.iso-table td) {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  :global(.iso-table tr:last-child td) {
+    border-bottom: none;
+  }
+
+  :global(.iso-td-bit) {
+    color: var(--fg);
+    font-weight: 600;
+    white-space: nowrap;
+    width: 3rem;
+  }
+
+  :global(.iso-td-name) {
+    color: var(--fg);
+    line-height: 1.4;
+  }
+
+  :global(.iso-td-type code) {
+    font-family: inherit;
+    color: #7aabcc;
+    font-size: 0.7rem;
+  }
+
+  :global(.iso-td-len) {
+    color: var(--fg-dim);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .iso-empty {
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    margin: 0;
+  }
+
+  /* ── Shared ── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  @media (max-width: 480px) {
+    .iso-grid {
+      gap: 2px;
+    }
+
+    .iso-grid :global(.iso-cell-abbr) {
+      display: none;
+    }
+
+    .iso-grid :global(.iso-cell-bit) {
+      font-size: 0.5rem;
+    }
+  }
+</style>

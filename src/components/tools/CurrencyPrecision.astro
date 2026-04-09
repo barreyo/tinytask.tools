@@ -1,0 +1,755 @@
+---
+// Fully client-side — pure math, no external APIs
+---
+
+<div class="cp-tool">
+  <!-- Preset bar -->
+  <div class="cp-preset-bar" role="group" aria-label="Loan presets">
+    <span class="section-label">preset</span>
+    <div class="cp-presets">
+      <button class="cp-preset-btn cp-preset-btn--active" data-preset="0">Personal Loan</button>
+      <button class="cp-preset-btn" data-preset="1">Micro-loan</button>
+      <button class="cp-preset-btn" data-preset="2">Auto Loan</button>
+      <button class="cp-preset-btn" data-preset="3">Mortgage</button>
+    </div>
+  </div>
+
+  <!-- Input section -->
+  <section class="cp-section">
+    <div class="cp-section-header">
+      <span class="section-label">loan parameters</span>
+    </div>
+    <div class="cp-section-body">
+      <div class="cp-input-grid">
+        <div class="field">
+          <label class="field-label" for="cp-principal">Principal ($)</label>
+          <input
+            id="cp-principal"
+            class="field-input"
+            type="number"
+            min="1"
+            step="0.01"
+            value="10000"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="cp-rate">Annual Rate (%)</label>
+          <input id="cp-rate" class="field-input" type="number" min="0" step="0.01" value="8.5" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="cp-term">Term (months)</label>
+          <input
+            id="cp-term"
+            class="field-input"
+            type="number"
+            min="1"
+            max="360"
+            step="1"
+            value="24"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="cp-decimals">Decimal Places</label>
+          <select id="cp-decimals" class="field-select">
+            <option value="2" selected>2 (cents)</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Rounding mode selection -->
+      <div class="cp-modes-section">
+        <span class="section-label">rounding modes to compare</span>
+        <div class="cp-modes" role="group" aria-label="Rounding modes">
+          <label class="cp-mode-label">
+            <input type="checkbox" class="cp-mode-cb" value="BANKERS" checked />
+            <span class="cp-mode-name">Banker's</span>
+            <span class="cp-mode-desc">(round half to even)</span>
+          </label>
+          <label class="cp-mode-label">
+            <input type="checkbox" class="cp-mode-cb" value="HALF_UP" checked />
+            <span class="cp-mode-name">Half-up</span>
+            <span class="cp-mode-desc">(round half away from zero)</span>
+          </label>
+          <label class="cp-mode-label">
+            <input type="checkbox" class="cp-mode-cb" value="FLOOR" checked />
+            <span class="cp-mode-name">Floor</span>
+            <span class="cp-mode-desc">(toward −∞)</span>
+          </label>
+          <label class="cp-mode-label">
+            <input type="checkbox" class="cp-mode-cb" value="CEIL" />
+            <span class="cp-mode-name">Ceiling</span>
+            <span class="cp-mode-desc">(toward +∞)</span>
+          </label>
+          <label class="cp-mode-label">
+            <input type="checkbox" class="cp-mode-cb" value="TRUNCATE" />
+            <span class="cp-mode-name">Truncate</span>
+            <span class="cp-mode-desc">(toward zero)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cp-action-row">
+        <button class="action-btn primary" id="cp-calc-btn">calculate</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <div id="cp-results" hidden>
+    <!-- Summary cards -->
+    <div id="cp-summary-cards" class="cp-summary-cards"></div>
+
+    <!-- Divergence bar -->
+    <section class="cp-section" id="cp-divergence-section">
+      <div class="cp-section-header">
+        <span class="section-label">total interest divergence</span>
+        <span id="cp-max-divergence" class="cp-divergence-badge"></span>
+      </div>
+      <div class="cp-section-body cp-section-body--bars">
+        <div id="cp-bars" class="cp-bars"></div>
+      </div>
+    </section>
+
+    <!-- Monthly breakdown table -->
+    <section class="cp-section">
+      <div class="cp-section-header">
+        <span class="section-label">month-by-month balance</span>
+        <div class="cp-section-header-right">
+          <label class="cp-toggle-label">
+            <input type="checkbox" id="cp-show-all" />
+            <span>show all months</span>
+          </label>
+          <button class="action-btn" id="cp-export-csv">export csv</button>
+        </div>
+      </div>
+      <div class="cp-section-body cp-section-body--table">
+        <div class="cp-table-wrap">
+          <table class="cp-table" id="cp-table">
+            <thead id="cp-thead"></thead>
+            <tbody id="cp-tbody"></tbody>
+          </table>
+        </div>
+        <div id="cp-table-more" class="cp-table-more" hidden>
+          <button class="action-btn" id="cp-show-more-btn">show more months</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  import { simulateLoan, computeMinPayment, LOAN_PRESETS } from '../../lib/currency-precision';
+  import type { RoundingMode, SimulationResult } from '../../lib/currency-precision';
+
+  const MODE_COLORS: Record<RoundingMode, string> = {
+    BANKERS: '#7aabcc',
+    HALF_UP: '#7ecb7e',
+    FLOOR: '#c87e7e',
+    CEIL: '#ccab7a',
+    TRUNCATE: '#ab7acc',
+  };
+
+  const principalEl = document.getElementById('cp-principal') as HTMLInputElement;
+  const rateEl = document.getElementById('cp-rate') as HTMLInputElement;
+  const termEl = document.getElementById('cp-term') as HTMLInputElement;
+  const decimalsEl = document.getElementById('cp-decimals') as HTMLSelectElement;
+  const calcBtn = document.getElementById('cp-calc-btn') as HTMLButtonElement;
+  const resultsEl = document.getElementById('cp-results') as HTMLDivElement;
+  const summaryCards = document.getElementById('cp-summary-cards') as HTMLDivElement;
+  const maxDivergence = document.getElementById('cp-max-divergence') as HTMLSpanElement;
+  const barsEl = document.getElementById('cp-bars') as HTMLDivElement;
+  const thead = document.getElementById('cp-thead') as HTMLTableSectionElement;
+  const tbody = document.getElementById('cp-tbody') as HTMLTableSectionElement;
+  const tableMore = document.getElementById('cp-table-more') as HTMLDivElement;
+  const showMoreBtn = document.getElementById('cp-show-more-btn') as HTMLButtonElement;
+  const showAllCb = document.getElementById('cp-show-all') as HTMLInputElement;
+  const exportCsvBtn = document.getElementById('cp-export-csv') as HTMLButtonElement;
+
+  let currentResults: SimulationResult[] = [];
+  let currentDecimals = 2;
+  let visibleRows = 12;
+  const ROWS_PER_PAGE = 12;
+
+  // Presets
+  document.querySelectorAll('.cp-preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt((btn as HTMLElement).dataset.preset ?? '0');
+      const preset = LOAN_PRESETS[idx];
+      principalEl.value = String(preset.principal);
+      rateEl.value = String(preset.annualRatePct);
+      termEl.value = String(preset.termMonths);
+      document
+        .querySelectorAll('.cp-preset-btn')
+        .forEach((b) => b.classList.remove('cp-preset-btn--active'));
+      btn.classList.add('cp-preset-btn--active');
+    });
+  });
+
+  function getSelectedModes(): RoundingMode[] {
+    return Array.from(document.querySelectorAll('.cp-mode-cb:checked')).map(
+      (el) => (el as HTMLInputElement).value as RoundingMode,
+    );
+  }
+
+  function fmt(val: number, dp: number): string {
+    return val.toFixed(dp);
+  }
+
+  function calculate() {
+    const principal = parseFloat(principalEl.value);
+    const annualRatePct = parseFloat(rateEl.value);
+    const termMonths = parseInt(termEl.value);
+    const decimalPlaces = parseInt(decimalsEl.value);
+    const modes = getSelectedModes();
+
+    if (!modes.length || isNaN(principal) || isNaN(annualRatePct) || isNaN(termMonths)) return;
+    if (principal <= 0 || termMonths <= 0) return;
+
+    currentDecimals = decimalPlaces;
+    visibleRows = ROWS_PER_PAGE;
+
+    const results = simulateLoan({ principal, annualRatePct, termMonths, decimalPlaces, modes });
+    currentResults = results;
+
+    renderSummaryCards(results, decimalPlaces);
+    renderDivergenceBars(results, decimalPlaces);
+    renderTable(results, decimalPlaces);
+
+    resultsEl.hidden = false;
+  }
+
+  function renderSummaryCards(results: SimulationResult[], dp: number) {
+    summaryCards.innerHTML = results
+      .map((r) => {
+        const color = MODE_COLORS[r.mode];
+        const payment = computeMinPayment(
+          parseFloat(principalEl.value),
+          parseFloat(rateEl.value),
+          parseInt(termEl.value),
+          dp,
+          r.mode,
+        );
+        return `
+        <div class="cp-stat-card" style="border-top-color:${color}">
+          <div class="cp-stat-mode" style="color:${color}">${r.mode.replace('_', '-')}</div>
+          <div class="cp-stat-row">
+            <span class="cp-stat-label">Monthly payment</span>
+            <span class="cp-stat-value">$${fmt(payment, dp)}</span>
+          </div>
+          <div class="cp-stat-row">
+            <span class="cp-stat-label">Total interest</span>
+            <span class="cp-stat-value">$${fmt(r.totalInterest, dp)}</span>
+          </div>
+          <div class="cp-stat-row">
+            <span class="cp-stat-label">Total paid</span>
+            <span class="cp-stat-value">$${fmt(r.totalPaid, dp)}</span>
+          </div>
+          <div class="cp-stat-row">
+            <span class="cp-stat-label">Months</span>
+            <span class="cp-stat-value">${r.months.length}</span>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  function renderDivergenceBars(results: SimulationResult[], dp: number) {
+    const interests = results.map((r) => r.totalInterest);
+    const maxInterest = Math.max(...interests);
+    const minInterest = Math.min(...interests);
+    const maxDiv = maxInterest - minInterest;
+    maxDivergence.textContent = `max divergence: $${fmt(maxDiv, dp)}`;
+
+    barsEl.innerHTML = results
+      .map((r) => {
+        const pct = maxInterest > 0 ? (r.totalInterest / maxInterest) * 100 : 100;
+        const color = MODE_COLORS[r.mode];
+        return `
+        <div class="cp-bar-row">
+          <span class="cp-bar-label" style="color:${color}">${r.mode.replace('_', '-')}</span>
+          <div class="cp-bar-track">
+            <div class="cp-bar-fill" style="width:${pct.toFixed(1)}%;background:${color}"></div>
+          </div>
+          <span class="cp-bar-value">$${fmt(r.totalInterest, dp)}</span>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  function renderTable(results: SimulationResult[], dp: number) {
+    const maxMonths = Math.max(...results.map((r) => r.months.length));
+    const showAll = showAllCb.checked;
+    const rowsToShow = showAll ? maxMonths : Math.min(visibleRows, maxMonths);
+
+    // Header
+    thead.innerHTML = `<tr>
+      <th>Month</th>
+      ${results.map((r) => `<th style="color:${MODE_COLORS[r.mode]}">${r.mode.replace('_', '-')}</th>`).join('')}
+    </tr>`;
+
+    // Rows
+    const rows = [];
+    for (let i = 0; i < rowsToShow; i++) {
+      const month = i + 1;
+      const cols = results
+        .map((r) => {
+          const row = r.months[i];
+          if (!row) return '<td class="cp-td-na">—</td>';
+          // Highlight if balance diverges from first result
+          const refBalance = results[0].months[i]?.balance ?? 0;
+          const diverges =
+            results.length > 1 && Math.abs(row.balance - refBalance) > Math.pow(10, -dp);
+          return `<td class="${diverges ? 'cp-td-diverge' : ''}">$${fmt(row.balance, dp)}</td>`;
+        })
+        .join('');
+      rows.push(`<tr><td class="cp-td-month">${month}</td>${cols}</tr>`);
+    }
+    tbody.innerHTML = rows.join('');
+
+    // More button
+    if (!showAll && rowsToShow < maxMonths) {
+      tableMore.hidden = false;
+      showMoreBtn.textContent = `show ${Math.min(ROWS_PER_PAGE, maxMonths - rowsToShow)} more months`;
+    } else {
+      tableMore.hidden = true;
+    }
+  }
+
+  showMoreBtn.addEventListener('click', () => {
+    visibleRows += ROWS_PER_PAGE;
+    renderTable(currentResults, currentDecimals);
+  });
+
+  showAllCb.addEventListener('change', () => {
+    if (currentResults.length) renderTable(currentResults, currentDecimals);
+  });
+
+  calcBtn.addEventListener('click', calculate);
+
+  document.querySelectorAll('.field-input, .field-select').forEach((el) => {
+    el.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') calculate();
+    });
+  });
+
+  exportCsvBtn.addEventListener('click', () => {
+    if (!currentResults.length) return;
+    const maxMonths = Math.max(...currentResults.map((r) => r.months.length));
+    const header = ['month', ...currentResults.map((r) => `balance_${r.mode.toLowerCase()}`)].join(
+      ',',
+    );
+    const rows = [];
+    for (let i = 0; i < maxMonths; i++) {
+      const cols = [
+        String(i + 1),
+        ...currentResults.map((r) => {
+          const row = r.months[i];
+          return row ? fmt(row.balance, currentDecimals) : '';
+        }),
+      ];
+      rows.push(cols.join(','));
+    }
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'currency-precision.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Initial calculation
+  calculate();
+</script>
+
+<style>
+  .cp-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 900px;
+  }
+
+  /* ── Preset bar ── */
+  .cp-preset-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .cp-presets {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .cp-preset-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s,
+      background 0.1s;
+  }
+
+  .cp-preset-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .cp-preset-btn--active {
+    border-color: var(--border-active);
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Sections ── */
+  .cp-section {
+    border: 1px solid var(--border);
+  }
+
+  .cp-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .cp-section-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .cp-section-body {
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .cp-section-body--bars {
+    padding: 0.875rem 0.75rem;
+  }
+
+  .cp-section-body--table {
+    padding: 0;
+  }
+
+  /* ── Input grid ── */
+  .cp-input-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .field-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .field-input {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+    outline: none;
+    transition: border-color 0.1s;
+    -moz-appearance: textfield;
+  }
+
+  .field-input::-webkit-inner-spin-button,
+  .field-input::-webkit-outer-spin-button {
+    opacity: 0.4;
+  }
+
+  .field-input:focus {
+    border-color: var(--border-active);
+  }
+
+  .field-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.1s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    padding-right: 1.8rem;
+  }
+
+  .field-select:focus {
+    border-color: var(--border-active);
+  }
+
+  /* ── Modes ── */
+  .cp-modes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cp-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+  }
+
+  .cp-mode-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+  }
+
+  .cp-mode-cb {
+    accent-color: var(--fg);
+    cursor: pointer;
+  }
+
+  .cp-mode-name {
+    color: var(--fg);
+  }
+
+  .cp-mode-desc {
+    color: var(--fg-dim);
+    font-size: 0.65rem;
+  }
+
+  /* ── Action row ── */
+  .cp-action-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* ── Summary cards ── */
+  .cp-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  :global(.cp-stat-card) {
+    border: 1px solid var(--border);
+    border-top-width: 2px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  :global(.cp-stat-mode) {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  :global(.cp-stat-row) {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  :global(.cp-stat-label) {
+    font-size: 0.62rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  :global(.cp-stat-value) {
+    font-size: 0.78rem;
+    color: var(--fg);
+    text-align: right;
+  }
+
+  /* ── Divergence bars ── */
+  .cp-divergence-badge {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
+
+  .cp-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  :global(.cp-bar-row) {
+    display: grid;
+    grid-template-columns: 6rem 1fr 7rem;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  :global(.cp-bar-label) {
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-align: right;
+  }
+
+  :global(.cp-bar-track) {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  :global(.cp-bar-fill) {
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+
+  :global(.cp-bar-value) {
+    font-size: 0.7rem;
+    color: var(--fg-dim);
+  }
+
+  /* ── Table ── */
+  .cp-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+
+  .cp-toggle-label input {
+    accent-color: var(--fg);
+    cursor: pointer;
+  }
+
+  .cp-table-wrap {
+    overflow-x: auto;
+  }
+
+  .cp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.73rem;
+  }
+
+  :global(.cp-table th) {
+    text-align: right;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  :global(.cp-table th:first-child) {
+    text-align: left;
+    color: var(--fg-dim);
+    font-weight: 400;
+  }
+
+  :global(.cp-table td) {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-dim);
+  }
+
+  :global(.cp-table tr:last-child td) {
+    border-bottom: none;
+  }
+
+  :global(.cp-td-month) {
+    text-align: left !important;
+    color: var(--fg-dim);
+  }
+
+  :global(.cp-td-na) {
+    color: var(--fg-dim);
+    opacity: 0.4;
+  }
+
+  :global(.cp-td-diverge) {
+    color: var(--fg) !important;
+    font-weight: 600;
+  }
+
+  .cp-table-more {
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Shared ── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+  }
+
+  .action-btn:hover {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn.primary {
+    color: var(--fg);
+    border-color: #555;
+  }
+
+  .action-btn.primary:hover {
+    border-color: var(--border-active);
+  }
+</style>

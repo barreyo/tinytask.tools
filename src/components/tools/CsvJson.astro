@@ -184,7 +184,7 @@
     process();
   });
 
-  // ── Auto-convert on input (debounced, like the YAML tool) ──────────────────
+  // ── Auto-convert on input (debounced) ───────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout>;
   function scheduleProcess(): void {
     clearTimeout(debounceTimer);

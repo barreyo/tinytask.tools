@@ -175,8 +175,32 @@ const itemListSchema = {
 
 <script>
   // ── Vimium-style hint navigation ──────────────────────────────────────────
-  const HINT_KEYS = 'asdfghjklqwertyuiopzxcvbnm1234567890'.split('');
+  const HINT_ALPHABET = 'asdfghjklqwertyuiopzxcvbnm';
+
+  /**
+   * Generate hint labels for `count` items. Uses single-character labels when
+   * count <= 26, otherwise reserves a few prefix characters for two-char
+   * labels so every item gets a unique hint.
+   */
+  function generateHintLabels(count: number): string[] {
+    const k = HINT_ALPHABET.length;
+    if (count <= k) return HINT_ALPHABET.slice(0, count).split('');
+
+    const prefixes = Math.ceil((count - k) / (k - 1));
+    const labels: string[] = [];
+    for (let i = prefixes; i < k && labels.length < count; i++) {
+      labels.push(HINT_ALPHABET[i]);
+    }
+    for (let pi = 0; pi < prefixes && labels.length < count; pi++) {
+      for (let si = 0; si < k && labels.length < count; si++) {
+        labels.push(HINT_ALPHABET[pi] + HINT_ALPHABET[si]);
+      }
+    }
+    return labels;
+  }
+
   let hintMode = false;
+  let hintBuffer = '';
   let hintGrid: HTMLElement | null = null;
 
   function activateHints() {
@@ -184,19 +208,21 @@ const itemListSchema = {
     if (document.getElementById('search-panel')?.classList.contains('is-open')) return;
 
     hintMode = true;
+    hintBuffer = '';
     document.body.setAttribute('data-hint-mode', '');
 
-    (
-      Array.from(
-        hintGrid.querySelectorAll('.tool-card-wrapper:not([data-hidden])'),
-      ) as HTMLElement[]
-    ).forEach((wrapper, i) => {
-      const key = HINT_KEYS[i];
-      if (!key) return;
-      wrapper.dataset.hintKey = key;
+    const wrappers = Array.from(
+      hintGrid.querySelectorAll('.tool-card-wrapper:not([data-hidden])'),
+    ) as HTMLElement[];
+    const labels = generateHintLabels(wrappers.length);
+
+    wrappers.forEach((wrapper, i) => {
+      const label = labels[i];
+      if (!label) return;
+      wrapper.dataset.hintKey = label;
       const badge = document.createElement('span');
       badge.className = 'vimium-hint';
-      badge.textContent = key.toUpperCase();
+      badge.textContent = label.toUpperCase();
       wrapper.querySelector('.tool-card')?.appendChild(badge);
     });
   }
@@ -204,6 +230,7 @@ const itemListSchema = {
   function deactivateHints() {
     if (!hintMode) return;
     hintMode = false;
+    hintBuffer = '';
     document.body.removeAttribute('data-hint-mode');
     document.querySelectorAll('.vimium-hint').forEach((el) => el.remove());
     if (hintGrid) {
@@ -221,13 +248,13 @@ const itemListSchema = {
       active &&
       (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
 
-    if (e.key === 'f' && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      activateHints();
+    if (!hintMode) {
+      if (e.key === 'f' && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        activateHints();
+      }
       return;
     }
-
-    if (!hintMode) return;
 
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -235,26 +262,60 @@ const itemListSchema = {
       return;
     }
 
-    const key = e.key.toLowerCase();
-    if (/^[a-z0-9]$/.test(key)) {
+    if (e.key === 'Backspace') {
       e.preventDefault();
-      const wrapper = hintGrid?.querySelector(`.tool-card-wrapper[data-hint-key="${key}"]`);
-      if (wrapper) {
-        const link = wrapper.querySelector('a') as HTMLAnchorElement | null;
-        deactivateHints();
-        link?.click();
+      if (hintBuffer.length > 0) {
+        hintBuffer = hintBuffer.slice(0, -1);
+        updateHintHighlights();
       } else {
         deactivateHints();
       }
+      return;
     }
+
+    const key = e.key.toLowerCase();
+    if (!/^[a-z]$/.test(key)) return;
+
+    e.preventDefault();
+    hintBuffer += key;
+
+    const exact = hintGrid?.querySelector(
+      `.tool-card-wrapper[data-hint-key="${hintBuffer}"]`,
+    ) as HTMLElement | null;
+    if (exact) {
+      const link = exact.querySelector('a') as HTMLAnchorElement | null;
+      deactivateHints();
+      link?.click();
+      return;
+    }
+
+    const partials = hintGrid?.querySelectorAll(
+      `.tool-card-wrapper[data-hint-key^="${hintBuffer}"]`,
+    );
+    if (!partials || partials.length === 0) {
+      deactivateHints();
+      return;
+    }
+
+    updateHintHighlights();
+  }
+
+  function updateHintHighlights() {
+    if (!hintGrid) return;
+    (
+      Array.from(hintGrid.querySelectorAll('.tool-card-wrapper[data-hint-key]')) as HTMLElement[]
+    ).forEach((w) => {
+      const badge = w.querySelector('.vimium-hint') as HTMLElement | null;
+      if (!badge) return;
+      const matches = w.dataset.hintKey?.startsWith(hintBuffer);
+      badge.classList.toggle('hint-dimmed', !matches);
+    });
   }
 
   function initHints() {
-    // Reset state and re-point grid reference to the freshly rendered DOM
     deactivateHints();
     hintGrid = document.querySelector('.tool-grid');
 
-    // Remove stale listener then re-add — prevents duplicates across navigations
     document.removeEventListener('keydown', handleHintKeydown);
     if (hintGrid) {
       document.addEventListener('keydown', handleHintKeydown);

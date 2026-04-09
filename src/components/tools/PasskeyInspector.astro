@@ -764,19 +764,19 @@
     gap: 0;
   }
 
-  .pk-error {
+  .pk-tool :global(.pk-error) {
     padding: 0.75rem;
     border: 1px solid #5a1a1a;
     color: #f07070;
     font-size: 0.8rem;
   }
 
-  .pk-section {
+  .pk-tool :global(.pk-section) {
     border: 1px solid var(--border);
     margin-top: 0.75rem;
   }
 
-  .pk-section-title {
+  .pk-tool :global(.pk-section-title) {
     font-size: 0.7rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -786,7 +786,7 @@
   }
 
   /* ── Fields ──────────────────────────────────────────────────────────────── */
-  .pk-field {
+  .pk-tool :global(.pk-field) {
     display: grid;
     grid-template-columns: 11rem 1fr;
     gap: 0.5rem;
@@ -796,70 +796,70 @@
     font-size: 0.78rem;
   }
 
-  .pk-field:last-child {
+  .pk-tool :global(.pk-field:last-child) {
     border-bottom: none;
   }
 
-  .field-label {
+  .pk-tool :global(.field-label) {
     color: var(--fg-dim);
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     flex-shrink: 0;
   }
 
-  .field-value {
+  .pk-tool :global(.field-value) {
     color: var(--fg);
     word-break: break-all;
   }
 
-  .field-mono {
+  .pk-tool :global(.field-mono) {
     font-family: inherit;
     font-size: 0.75rem;
   }
 
-  .field-break {
+  .pk-tool :global(.field-break) {
     word-break: break-all;
   }
 
-  .field-dim {
+  .pk-tool :global(.field-dim) {
     color: var(--fg-dim);
   }
 
-  .field-highlight {
+  .pk-tool :global(.field-highlight) {
     color: var(--fg);
   }
 
-  .field-found {
+  .pk-tool :global(.field-found) {
     color: #7ec8a0;
     font-size: 0.75rem;
   }
 
-  .field-unknown {
+  .pk-tool :global(.field-unknown) {
     color: var(--fg-dim);
     font-size: 0.75rem;
     font-style: italic;
   }
 
-  .field-origin {
+  .pk-tool :global(.field-origin) {
     color: #c8b4f0;
     font-size: 0.8rem;
     letter-spacing: 0.02em;
   }
 
-  .field-aaguid-name {
+  .pk-tool :global(.field-aaguid-name) {
     display: inline-block;
     margin-left: 0.75rem;
     font-size: 0.72rem;
   }
 
   /* ── Flag badges ─────────────────────────────────────────────────────────── */
-  .flag-row {
+  .pk-tool :global(.flag-row) {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
   }
 
-  .flag-badge {
+  .pk-tool :global(.flag-badge) {
     display: inline-block;
     font-size: 0.65rem;
     letter-spacing: 0.06em;
@@ -868,19 +868,19 @@
     text-transform: uppercase;
   }
 
-  .flag-on {
+  .pk-tool :global(.flag-on) {
     border-color: #7ec8a0;
     color: #7ec8a0;
     background: rgba(126, 200, 160, 0.08);
   }
 
-  .flag-off {
+  .pk-tool :global(.flag-off) {
     color: var(--fg-dim);
     opacity: 0.5;
   }
 
   /* ── Credential type badge ───────────────────────────────────────────────── */
-  .pk-cred-type {
+  .pk-tool :global(.pk-cred-type) {
     display: inline-block;
     font-size: 0.72rem;
     letter-spacing: 0.06em;
@@ -891,12 +891,12 @@
     margin-bottom: 0.25rem;
   }
 
-  .pk-cred-type.registration {
+  .pk-tool :global(.pk-cred-type.registration) {
     border-color: #7aabcc;
     color: #7aabcc;
   }
 
-  .pk-cred-type.assertion {
+  .pk-tool :global(.pk-cred-type.assertion) {
     border-color: #c8b4f0;
     color: #c8b4f0;
   }
@@ -910,14 +910,14 @@
     gap: 0.4rem;
   }
 
-  .aaguid-row {
+  .aaguid-result :global(.aaguid-row) {
     display: flex;
     gap: 1rem;
     align-items: baseline;
     font-size: 0.8rem;
   }
 
-  .aaguid-row .field-label {
+  .aaguid-result :global(.aaguid-row .field-label) {
     min-width: 7rem;
   }
 
@@ -985,7 +985,7 @@
       grid-template-columns: 1fr;
     }
 
-    .pk-field {
+    .pk-tool :global(.pk-field) {
       grid-template-columns: 1fr;
       gap: 0.2rem;
     }

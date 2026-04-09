@@ -1,0 +1,593 @@
+---
+// Fully client-side — uses Web Crypto API
+---
+
+<div class="jwk-tool">
+  <!-- Configuration -->
+  <div class="controls-section">
+    <div class="controls-header">
+      <span class="section-label">generate new key</span>
+    </div>
+    <div class="controls-body">
+      <div class="control-row">
+        <div class="field">
+          <label class="field-label" for="jwk-algo">Algorithm</label>
+          <select id="jwk-algo" class="field-select">
+            <option value="RSA" selected>RSA</option>
+            <option value="EC">EC (Elliptic Curve)</option>
+            <option value="EdDSA">EdDSA (Ed25519)</option>
+          </select>
+        </div>
+        <div class="field" id="jwk-rsa-size-field">
+          <label class="field-label" for="jwk-rsa-size">Key size</label>
+          <select id="jwk-rsa-size" class="field-select">
+            <option value="2048" selected>2048 bits</option>
+            <option value="4096">4096 bits</option>
+          </select>
+        </div>
+        <div class="field" id="jwk-ec-curve-field" hidden>
+          <label class="field-label" for="jwk-ec-curve">Curve</label>
+          <select id="jwk-ec-curve" class="field-select">
+            <option value="P-256" selected>P-256</option>
+            <option value="P-384">P-384</option>
+            <option value="P-521">P-521</option>
+          </select>
+        </div>
+        <div class="field" id="jwk-usage-field">
+          <label class="field-label" for="jwk-usage">Usage</label>
+          <select id="jwk-usage" class="field-select">
+            <option value="sign" selected>Sign / Verify</option>
+            <option value="encrypt">Encrypt / Decrypt</option>
+          </select>
+        </div>
+        <div class="field field-btn">
+          <label class="field-label">&nbsp;</label>
+          <button class="action-btn primary" id="jwk-generate-btn">generate</button>
+        </div>
+      </div>
+      <p class="hint" id="jwk-hint" hidden>4096-bit RSA keys may take a few seconds.</p>
+    </div>
+  </div>
+
+  <!-- PEM import section -->
+  <div class="controls-section">
+    <div class="controls-header">
+      <span class="section-label">convert PEM to JWK</span>
+    </div>
+    <div class="controls-body">
+      <div class="pem-row">
+        <div class="pem-field">
+          <label class="field-label" for="jwk-pem-input">Paste PEM key</label>
+          <textarea
+            id="jwk-pem-input"
+            class="pem-textarea"
+            rows="6"
+            spellcheck="false"
+            placeholder="-----BEGIN PUBLIC KEY-----
+...
+-----END PUBLIC KEY-----"></textarea>
+        </div>
+        <div class="pem-controls">
+          <div class="field">
+            <label class="field-label" for="jwk-pem-type">Key type</label>
+            <select id="jwk-pem-type" class="field-select">
+              <option value="public" selected>Public key</option>
+              <option value="private">Private key</option>
+            </select>
+          </div>
+          <button class="action-btn primary" id="jwk-convert-btn">convert</button>
+        </div>
+      </div>
+      <div id="jwk-pem-error" class="jwk-error" hidden></div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div id="jwk-status" class="status-display" hidden>
+    <span id="jwk-status-text" class="status-text">generating…</span>
+  </div>
+
+  <!-- Public JWK output -->
+  <div id="jwk-public-section" class="key-section" hidden>
+    <div class="key-header">
+      <div class="key-meta">
+        <span class="section-label">public JWK</span>
+        <span class="key-format-label" id="jwk-public-label">(RSA / sign)</span>
+      </div>
+      <div class="key-actions">
+        <button class="action-btn" id="jwk-copy-public-btn">copy</button>
+        <button class="action-btn" id="jwk-download-public-btn">download .jwk</button>
+      </div>
+    </div>
+    <textarea id="jwk-public-output" class="key-textarea" readonly spellcheck="false" rows="12"
+    ></textarea>
+    <div class="thumbprint-row">
+      <span class="section-label">thumbprint (RFC 7638)</span>
+      <code id="jwk-thumbprint" class="thumbprint-value"></code>
+      <button class="action-btn" id="jwk-copy-thumb-btn">copy</button>
+    </div>
+  </div>
+
+  <!-- Private JWK output -->
+  <div id="jwk-private-section" class="key-section" hidden>
+    <div class="key-header">
+      <div class="key-meta">
+        <span class="section-label">private JWK</span>
+        <span class="key-format-label" id="jwk-private-label">(RSA / sign)</span>
+      </div>
+      <div class="key-actions">
+        <button class="action-btn" id="jwk-copy-private-btn">copy</button>
+        <button class="action-btn" id="jwk-download-private-btn">download .jwk</button>
+      </div>
+    </div>
+    <textarea id="jwk-private-output" class="key-textarea" readonly spellcheck="false" rows="16"
+    ></textarea>
+    <p class="private-warning">
+      Keep this private key secret — never share it or commit it to source control.
+    </p>
+  </div>
+</div>
+
+<script>
+  import { generateJwk, pemToJwk } from '../../lib/jwk-generator';
+  import type {
+    JwkAlgorithm,
+    KeyUsageMode,
+    EcCurve,
+    RsaModulusLength,
+  } from '../../lib/jwk-generator';
+
+  const algoEl = document.getElementById('jwk-algo') as HTMLSelectElement;
+  const rsaSizeField = document.getElementById('jwk-rsa-size-field') as HTMLDivElement;
+  const rsaSizeEl = document.getElementById('jwk-rsa-size') as HTMLSelectElement;
+  const ecCurveField = document.getElementById('jwk-ec-curve-field') as HTMLDivElement;
+  const ecCurveEl = document.getElementById('jwk-ec-curve') as HTMLSelectElement;
+  const usageEl = document.getElementById('jwk-usage') as HTMLSelectElement;
+  const hintEl = document.getElementById('jwk-hint') as HTMLParagraphElement;
+  const generateBtn = document.getElementById('jwk-generate-btn') as HTMLButtonElement;
+
+  const pemInput = document.getElementById('jwk-pem-input') as HTMLTextAreaElement;
+  const pemTypeEl = document.getElementById('jwk-pem-type') as HTMLSelectElement;
+  const convertBtn = document.getElementById('jwk-convert-btn') as HTMLButtonElement;
+  const pemError = document.getElementById('jwk-pem-error') as HTMLDivElement;
+
+  const statusEl = document.getElementById('jwk-status') as HTMLDivElement;
+  const statusText = document.getElementById('jwk-status-text') as HTMLSpanElement;
+
+  const publicSection = document.getElementById('jwk-public-section') as HTMLDivElement;
+  const publicLabel = document.getElementById('jwk-public-label') as HTMLSpanElement;
+  const publicOutput = document.getElementById('jwk-public-output') as HTMLTextAreaElement;
+  const thumbprintEl = document.getElementById('jwk-thumbprint') as HTMLElement;
+  const copyPublicBtn = document.getElementById('jwk-copy-public-btn') as HTMLButtonElement;
+  const downloadPublicBtn = document.getElementById('jwk-download-public-btn') as HTMLButtonElement;
+  const copyThumbBtn = document.getElementById('jwk-copy-thumb-btn') as HTMLButtonElement;
+
+  const privateSection = document.getElementById('jwk-private-section') as HTMLDivElement;
+  const privateLabel = document.getElementById('jwk-private-label') as HTMLSpanElement;
+  const privateOutput = document.getElementById('jwk-private-output') as HTMLTextAreaElement;
+  const copyPrivateBtn = document.getElementById('jwk-copy-private-btn') as HTMLButtonElement;
+  const downloadPrivateBtn = document.getElementById(
+    'jwk-download-private-btn',
+  ) as HTMLButtonElement;
+
+  function updateAlgoUI() {
+    const algo = algoEl.value as JwkAlgorithm;
+    rsaSizeField.hidden = algo !== 'RSA';
+    ecCurveField.hidden = algo !== 'EC';
+    hintEl.hidden = !(algo === 'RSA' && rsaSizeEl.value === '4096');
+
+    if (algo === 'EdDSA') {
+      usageEl.value = 'sign';
+      (usageEl.querySelector('option[value="encrypt"]') as HTMLOptionElement).disabled = true;
+    } else {
+      (usageEl.querySelector('option[value="encrypt"]') as HTMLOptionElement).disabled = false;
+    }
+  }
+
+  algoEl.addEventListener('change', updateAlgoUI);
+  rsaSizeEl.addEventListener('change', updateAlgoUI);
+  updateAlgoUI();
+
+  function formatKey() {
+    const algo = algoEl.value;
+    const usage = usageEl.value;
+    return `(${algo === 'EC' ? ecCurveEl.value : algo} / ${usage === 'sign' ? 'sign' : 'encrypt'})`;
+  }
+
+  function showStatus(msg: string) {
+    statusText.textContent = msg;
+    statusEl.hidden = false;
+  }
+
+  function hideStatus() {
+    statusEl.hidden = true;
+  }
+
+  function downloadJwk(jwk: JsonWebKey, filename: string) {
+    const blob = new Blob([JSON.stringify(jwk, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function copyText(btn: HTMLButtonElement, text: string) {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = 'copied';
+    setTimeout(() => {
+      btn.textContent = orig;
+    }, 1200);
+  }
+
+  function displayKeyPair(
+    publicJwk: JsonWebKey,
+    privateJwk: JsonWebKey | null,
+    thumbprint: string,
+  ) {
+    const label = formatKey();
+    publicLabel.textContent = label;
+    publicOutput.value = JSON.stringify(publicJwk, null, 2);
+    thumbprintEl.textContent = thumbprint;
+    publicSection.hidden = false;
+
+    if (privateJwk) {
+      privateLabel.textContent = label;
+      privateOutput.value = JSON.stringify(privateJwk, null, 2);
+      privateSection.hidden = false;
+    } else {
+      privateSection.hidden = true;
+    }
+  }
+
+  generateBtn.addEventListener('click', async () => {
+    pemError.hidden = true;
+    generateBtn.disabled = true;
+    showStatus('generating…');
+    publicSection.hidden = true;
+    privateSection.hidden = true;
+
+    try {
+      const algo = algoEl.value as JwkAlgorithm;
+      const usage = usageEl.value as KeyUsageMode;
+      const pair = await generateJwk({
+        algorithm: algo,
+        modulusLength: algo === 'RSA' ? (parseInt(rsaSizeEl.value) as RsaModulusLength) : undefined,
+        curve: algo === 'EC' ? (ecCurveEl.value as EcCurve) : undefined,
+        usage,
+      });
+
+      displayKeyPair(pair.publicJwk, pair.privateJwk, pair.thumbprint);
+      hideStatus();
+    } catch (err) {
+      statusText.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      generateBtn.disabled = false;
+    }
+  });
+
+  convertBtn.addEventListener('click', async () => {
+    pemError.hidden = true;
+    const pem = pemInput.value.trim();
+    if (!pem) {
+      pemError.textContent = 'Paste a PEM key first.';
+      pemError.hidden = false;
+      return;
+    }
+
+    convertBtn.disabled = true;
+    convertBtn.textContent = 'converting…';
+
+    try {
+      const type = pemTypeEl.value as 'public' | 'private';
+      const jwk = await pemToJwk(pem, type);
+
+      if (type === 'public') {
+        const { computeThumbprint } = await import('../../lib/jwk-generator');
+        const thumbprint = await computeThumbprint(jwk);
+        (jwk as Record<string, unknown>).kid = thumbprint;
+        displayKeyPair(jwk, null, thumbprint);
+      } else {
+        privateLabel.textContent = '(converted from PEM)';
+        privateOutput.value = JSON.stringify(jwk, null, 2);
+        privateSection.hidden = false;
+        publicSection.hidden = true;
+        hideStatus();
+      }
+    } catch (err) {
+      pemError.textContent = err instanceof Error ? err.message : 'Failed to convert PEM key.';
+      pemError.hidden = false;
+    } finally {
+      convertBtn.disabled = false;
+      convertBtn.textContent = 'convert';
+    }
+  });
+
+  copyPublicBtn.addEventListener('click', () => copyText(copyPublicBtn, publicOutput.value));
+  copyPrivateBtn.addEventListener('click', () => copyText(copyPrivateBtn, privateOutput.value));
+  copyThumbBtn.addEventListener('click', () =>
+    copyText(copyThumbBtn, thumbprintEl.textContent ?? ''),
+  );
+
+  downloadPublicBtn.addEventListener('click', () => {
+    try {
+      const jwk = JSON.parse(publicOutput.value) as JsonWebKey;
+      downloadJwk(jwk, 'public.jwk');
+    } catch {
+      /* empty */
+    }
+  });
+
+  downloadPrivateBtn.addEventListener('click', () => {
+    try {
+      const jwk = JSON.parse(privateOutput.value) as JsonWebKey;
+      downloadJwk(jwk, 'private.jwk');
+    } catch {
+      /* empty */
+    }
+  });
+</script>
+
+<style>
+  .jwk-tool {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 800px;
+  }
+
+  /* ── Shared section chrome ── */
+  .controls-section,
+  .key-section {
+    border: 1px solid var(--border);
+  }
+
+  .controls-header,
+  .key-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .controls-body {
+    padding: 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .control-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  /* ── Fields ── */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .field-btn {
+    flex-shrink: 0;
+  }
+
+  .field-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .field-select {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.1s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    padding-right: 1.8rem;
+  }
+
+  .field-select:focus {
+    border-color: var(--border-active);
+  }
+
+  .hint {
+    font-size: 0.68rem;
+    color: var(--fg-dim);
+    margin: 0;
+    opacity: 0.7;
+  }
+
+  /* ── PEM import ── */
+  .pem-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .pem-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .pem-textarea {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.72rem;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.1s;
+    line-height: 1.5;
+  }
+
+  .pem-textarea:focus {
+    border-color: var(--border-active);
+  }
+
+  .pem-textarea::placeholder {
+    color: var(--fg-dim);
+    opacity: 0.4;
+    font-size: 0.68rem;
+  }
+
+  .pem-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1.1rem;
+    min-width: 120px;
+  }
+
+  .jwk-error {
+    font-size: 0.72rem;
+    color: #c87e7e;
+    border: 1px solid #7a3a3a;
+    padding: 0.4rem 0.6rem;
+    background: rgba(180, 80, 80, 0.06);
+    margin-top: 0.25rem;
+  }
+
+  /* ── Status ── */
+  .status-display {
+    border: 1px solid var(--border);
+    padding: 0.6rem 0.75rem;
+  }
+
+  .status-text {
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+  }
+
+  /* ── Key output sections ── */
+  .key-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .key-format-label {
+    font-size: 0.65rem;
+    color: var(--fg-dim);
+  }
+
+  .key-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .key-textarea {
+    width: 100%;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 0.75rem;
+    outline: none;
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .thumbprint-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .thumbprint-value {
+    font-family: inherit;
+    font-size: 0.68rem;
+    color: #7aabcc;
+    word-break: break-all;
+    flex: 1;
+  }
+
+  .private-warning {
+    font-size: 0.68rem;
+    color: #c87e7e;
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Shared ── */
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+  }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
+    white-space: nowrap;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-active);
+    color: var(--fg);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .action-btn.primary {
+    color: var(--fg);
+    border-color: #555;
+  }
+
+  .action-btn.primary:hover:not(:disabled) {
+    border-color: var(--border-active);
+  }
+
+  @media (max-width: 540px) {
+    .pem-row {
+      grid-template-columns: 1fr;
+    }
+
+    .pem-controls {
+      padding-top: 0;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+  }
+</style>

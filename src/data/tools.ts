@@ -760,6 +760,198 @@ export const tools: Tool[] = [
     ],
   },
   {
+    slug: 'checksum-crc',
+    name: 'Checksum & CRC Calculator',
+    description:
+      'Compute CRC-32, CRC-16, CRC-8, Adler-32, byte checksum, and parity bit for any text or hex byte input — with an expected-value verifier.',
+    metaDescription:
+      'Free online CRC and checksum calculator — compute CRC-32, CRC-16, CRC-8, Adler-32, byte checksum, and parity bit for text or hex bytes. Verify against expected values. Runs entirely in your browser.',
+    tags: ['crc', 'checksum', 'parity', 'data integrity', 'crc32', 'adler'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is a CRC?',
+        a: 'A Cyclic Redundancy Check (CRC) is a hash computed by treating the data as a polynomial and dividing it by a fixed generator polynomial. The remainder is the CRC. It detects accidental burst errors reliably and is used in Ethernet, ZIP, PNG, and most storage systems.',
+      },
+      {
+        q: 'What is the difference between CRC-32, CRC-16, and CRC-8?',
+        a: 'The number indicates the output size in bits. CRC-32 (32-bit) is the most robust and used in ZIP and Ethernet. CRC-16 (16-bit) is used in XMODEM and Bluetooth. CRC-8 (8-bit) is the smallest, used in SMBus and I²C. Larger CRCs detect more error patterns but produce bigger overhead.',
+      },
+      {
+        q: 'What is Adler-32?',
+        a: 'Adler-32 computes two 16-bit running sums over the data, combined into a 32-bit result. It is defined in RFC 1950 and used in zlib and PNG. It is faster than CRC-32 but less robust for small messages.',
+      },
+      {
+        q: 'What is the difference between a CRC and a checksum?',
+        a: 'A simple checksum (byte sum) is just the arithmetic sum of all byte values, truncated to a fixed width. It is fast but cannot detect transposition errors (swapped bytes produce the same sum). CRCs use polynomial division and detect transpositions, burst errors, and many error patterns a simple sum misses.',
+      },
+      {
+        q: 'What does the parity bit detect?',
+        a: 'A parity bit is set to make the total count of 1-bits even (even parity) or odd (odd parity). It detects any single-bit flip but misses double-bit errors. It is used in RAM, UART serial, and RAID-5 (which uses XOR across disks as a byte-level parity).',
+      },
+      {
+        q: 'Is my data sent to a server?',
+        a: 'No. All computations run in your browser using pure JavaScript. No data leaves your device.',
+      },
+    ],
+  },
+  {
+    slug: 'check-digit',
+    name: 'Check Digit Calculator',
+    description:
+      'Validate and compute check digits using Verhoeff, Damm, and ISBN-10 algorithms — with step-by-step breakdowns.',
+    metaDescription:
+      'Free online check digit calculator — validate numbers and compute check digits using Verhoeff, Damm, and ISBN-10 algorithms. Step-by-step breakdowns. Runs entirely in your browser.',
+    tags: ['validate', 'check digit', 'verhoeff', 'damm', 'isbn'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is a check digit?',
+        a: 'A check digit is a calculated digit appended to a number to detect transcription errors. When you re-compute the check digit from the other digits and get the same result, the number is structurally valid. Check digits catch common mistakes like mistyped digits and swapped adjacent digits.',
+      },
+      {
+        q: 'What is the Verhoeff algorithm?',
+        a: 'Verhoeff (1969) uses multiplication and permutation tables derived from the Dihedral group D5. It detects all single-digit errors and all adjacent transposition errors — making it more powerful than simpler algorithms like Luhn.',
+      },
+      {
+        q: 'What is the Damm algorithm?',
+        a: 'Damm (2004) uses a single 10×10 quasigroup operation table. It detects all single-digit errors and all adjacent transpositions, and is slightly simpler to implement than Verhoeff. It is used in scenarios requiring high accuracy.',
+      },
+      {
+        q: 'What is the ISBN-10 check digit?',
+        a: "ISBN-10 uses a weighted sum where each digit is multiplied by its position weight (10 down to 1), and the sum must be divisible by 11. The check digit can be 0–9 or 'X' (representing 10). ISBN-13 uses a different algorithm.",
+      },
+      {
+        q: 'How is this different from the Luhn Checker?',
+        a: 'The Luhn algorithm (used for credit cards) detects all single-digit errors but misses some transposition errors. Verhoeff and Damm are strictly stronger. This tool focuses on general-purpose check digits; the Luhn Checker has a credit-card-specific UI with IIN/BIN generation.',
+      },
+    ],
+  },
+  {
+    slug: 'iso8583-bitmap',
+    name: 'ISO 8583 Bitmap Visualizer',
+    description:
+      'Paste a hex bitmap string and instantly see which ISO 8583 fields are active, with field names, types, and descriptions for all 128 bits.',
+    metaDescription:
+      'Free browser-based ISO 8583 bitmap visualizer. Paste a hex string and see which financial message fields are set — all 128 bit definitions included. No data leaves your device.',
+    tags: ['finance', 'parser', 'visualizer'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is an ISO 8583 bitmap?',
+        a: 'An ISO 8583 bitmap is a bit field (typically 64 or 128 bits, represented as 16 or 32 hex characters) that indicates which data fields are present in a financial message. Each bit corresponds to a specific field — for example, Bit 2 is the Primary Account Number (PAN), Bit 4 is the transaction amount, and Bit 7 is the transmission date and time.',
+      },
+      {
+        q: 'What is the secondary bitmap?',
+        a: 'When Bit 1 of the primary bitmap is set to 1, it signals that a secondary bitmap follows immediately in the message. The secondary bitmap covers bits 65–128, enabling additional fields for more complex transaction types.',
+      },
+      {
+        q: 'What hex format should I paste?',
+        a: 'Paste 16 hex characters for a primary-only bitmap (64 bits) or 32 hex characters for a primary + secondary bitmap (128 bits). Spaces are ignored, so formatted values like "7230 0541 28C2 8805" work fine.',
+      },
+    ],
+  },
+  {
+    slug: 'jwk-generator',
+    name: 'JWK Generator',
+    description:
+      'Generate RSA, EC, and Ed25519 JSON Web Keys (JWK) in your browser, or convert existing PEM keys to JWK format with RFC 7638 thumbprints.',
+    metaDescription:
+      'Free browser-based JWK generator. Create RSA, EC (P-256/P-384/P-521), and Ed25519 JSON Web Keys, convert PEM to JWK, and compute RFC 7638 thumbprints — entirely client-side.',
+    tags: ['crypto', 'security', 'jwt', 'oidc'],
+    implemented: true,
+    faq: [
+      {
+        q: 'What is a JSON Web Key (JWK)?',
+        a: 'A JSON Web Key (JWK) is a JSON data structure that represents a cryptographic key. Defined in RFC 7517, JWKs are widely used in OAuth 2.0, OpenID Connect, and financial APIs (like FAPI) to distribute public keys for token signing and encryption.',
+      },
+      {
+        q: 'What is an RFC 7638 thumbprint?',
+        a: 'An RFC 7638 thumbprint is a hash of the canonical form of a JWK public key, used as a stable key identifier (kid). It is computed by SHA-256-hashing the JSON serialization of the required key members in lexicographic order, then base64url-encoding the result.',
+      },
+      {
+        q: 'How do I convert a PEM key to JWK?',
+        a: 'Paste your PEM key (starting with -----BEGIN...) into the "Convert PEM to JWK" section, select whether it is a public or private key, and click Convert. The tool supports RSA, EC (P-256/P-384/P-521), and Ed25519 keys.',
+      },
+      {
+        q: 'Is key generation secure?',
+        a: "Yes. All key generation uses the browser's built-in Web Crypto API (crypto.subtle), which is implemented by the browser using native cryptographic primitives. No keys are ever sent to any server.",
+      },
+    ],
+  },
+  {
+    slug: 'currency-precision',
+    name: 'Currency Precision Sandbox',
+    description:
+      "Simulate how different rounding algorithms — Banker's, Floor, Ceiling, Half-up, Truncate — affect loan balances month by month and diverge over time.",
+    metaDescription:
+      "Free browser-based currency rounding sandbox. Compare how Banker's rounding, Floor, Ceiling, Half-up, and Truncate modes affect loan balances over 12–360 months. No data sent to servers.",
+    tags: ['finance', 'math', 'calculator'],
+    implemented: true,
+    faq: [
+      {
+        q: "What is Banker's rounding?",
+        a: "Banker's rounding (also called round-half-to-even or IEEE 754 default rounding) rounds a number that is exactly halfway between two values to the nearest even digit. For example, 2.5 rounds to 2 (even) and 3.5 rounds to 4 (even). This eliminates the statistical bias introduced by always rounding 0.5 upward.",
+      },
+      {
+        q: 'Why does rounding mode matter for loans?',
+        a: 'Each monthly payment calculation involves multiplying the balance by the interest rate and rounding the result. Tiny differences of one or two cents per month compound across hundreds of payments. Over a 30-year mortgage, different rounding modes can produce divergent final balances by dollars or even tens of dollars.',
+      },
+      {
+        q: 'What does the decimal places setting do?',
+        a: 'The decimal places setting controls the precision at which rounding is applied each month. Two decimal places simulates cent-level accounting (standard for retail banking). Higher precision reduces rounding error but may not match what real systems actually store.',
+      },
+    ],
+  },
+  {
+    slug: 'audio-trimmer',
+    name: 'Audio Trimmer',
+    description:
+      'Upload an audio file, drag trim handles on the waveform, preview the selection, and export as a WAV file — entirely in your browser.',
+    metaDescription:
+      'Free browser-based audio trimmer. Upload MP3, WAV, OGG, AAC, or FLAC files, set trim in and out points with draggable handles, preview playback, and export WAV — no upload required.',
+    tags: ['audio', 'media'],
+    implemented: true,
+    faq: [
+      {
+        q: 'Which audio formats are supported?',
+        a: 'The tool accepts any audio format your browser can decode, which typically includes MP3, WAV, OGG Vorbis, AAC, FLAC, and M4A. The export format is always WAV (16-bit PCM), which is lossless and universally compatible.',
+      },
+      {
+        q: 'Why does the export format have to be WAV?',
+        a: 'Browsers can decode most audio formats but do not expose a built-in MP3 encoder. WAV (PCM) encoding requires no external library and produces a lossless copy of the trimmed audio. You can convert the resulting WAV to MP3 with any audio editor afterward.',
+      },
+      {
+        q: 'How precise is the trim?',
+        a: 'Trim precision is sample-accurate — the in and out points are converted to the nearest audio sample (e.g., at 44,100 Hz, each sample is ~0.023 ms). You can enter exact times in the numeric inputs for sub-millisecond precision.',
+      },
+    ],
+  },
+  {
+    slug: 'frame-extractor',
+    name: 'Frame Extractor / GIF Maker',
+    description:
+      'Upload a video, seek to any position to capture PNG frames, or convert a short clip into an animated GIF — all client-side, nothing uploaded.',
+    metaDescription:
+      'Free browser-based video frame extractor and GIF maker. Upload any browser-playable video, capture frames as PNG images, or create high-quality animated GIFs from any clip. No server uploads.',
+    tags: ['video', 'media', 'gif'],
+    implemented: true,
+    faq: [
+      {
+        q: 'Which video formats are supported?',
+        a: 'The tool supports any video format your browser can play natively — typically MP4 (H.264), WebM (VP8/VP9), and MOV on desktop. The actual codec support varies by browser and operating system.',
+      },
+      {
+        q: 'How many frames can I export?',
+        a: 'For frame capture, there is no hard limit. For GIF generation, the tool warns you when the estimated frame count exceeds 200 frames, since high frame counts require significant memory. Reducing the clip duration, frame rate, or output width keeps GIF files small and generation fast.',
+      },
+      {
+        q: 'What is the quality of the generated GIF?',
+        a: 'GIFs are limited to 256 colors per frame, which is a fundamental limitation of the GIF format. The tool uses perceptual color quantization (via gifenc) to choose the best 256 colors for each frame, producing good results for most content. For photographic video, consider a lower output width to compensate for the color reduction.',
+      },
+    ],
+  },
+  {
     slug: 'nacha-parser',
     name: 'NACHA / ACH File Parser',
     description:

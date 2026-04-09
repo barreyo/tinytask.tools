@@ -10,7 +10,7 @@ const total = currencies.length;
       id="cl-search"
       class="cl-search"
       type="search"
-      placeholder="Search by code, name, country, or symbol… (e.g. USD, yen, Japan, ¥)"
+      placeholder="Search by code, numeric, name, country, or symbol… (e.g. USD, 840, yen, Japan, ¥)"
       autocomplete="off"
       spellcheck="false"
       aria-label="Search currencies"
@@ -41,6 +41,7 @@ const total = currencies.length;
             <tr
               class="cl-row"
               data-code={c.code.toLowerCase()}
+              data-num={c.numericCode}
               data-name={c.name.toLowerCase()}
               data-sym={c.symbol.toLowerCase()}
               data-countries={c.countries.map((x) => x.name.toLowerCase()).join(' ')}
@@ -80,49 +81,56 @@ const total = currencies.length;
 </div>
 
 <script>
-  const searchEl = document.getElementById('cl-search') as HTMLInputElement;
-  const countEl = document.getElementById('cl-count') as HTMLDivElement;
-  const tbody = document.getElementById('cl-tbody') as HTMLTableSectionElement;
-  const emptyEl = document.getElementById('cl-empty') as HTMLDivElement;
+  function setup() {
+    const searchEl = document.getElementById('cl-search') as HTMLInputElement;
+    const countEl = document.getElementById('cl-count') as HTMLDivElement;
+    const tbody = document.getElementById('cl-tbody') as HTMLTableSectionElement;
+    const emptyEl = document.getElementById('cl-empty') as HTMLDivElement;
 
-  const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('.cl-row'));
-  const total = rows.length;
+    if (!searchEl || !countEl || !tbody || !emptyEl) return;
 
-  function filter(query: string) {
-    const q = query.toLowerCase().trim();
-    let visible = 0;
+    const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('.cl-row'));
+    const total = rows.length;
 
-    for (const row of rows) {
-      const matches =
-        !q ||
-        row.dataset.code?.includes(q) ||
-        row.dataset.name?.includes(q) ||
-        row.dataset.sym?.includes(q) ||
-        row.dataset.countries?.includes(q);
+    function filter(query: string) {
+      const q = query.toLowerCase().trim();
+      let visible = 0;
 
-      if (matches) {
-        row.hidden = false;
-        visible++;
+      for (const row of rows) {
+        const matches =
+          !q ||
+          row.dataset.code?.includes(q) ||
+          row.dataset.num?.includes(q) ||
+          row.dataset.name?.includes(q) ||
+          row.dataset.sym?.includes(q) ||
+          row.dataset.countries?.includes(q);
+
+        if (matches) {
+          row.hidden = false;
+          visible++;
+        } else {
+          row.hidden = true;
+        }
+      }
+
+      if (visible === 0) {
+        emptyEl.hidden = false;
+        countEl.textContent = 'No results';
       } else {
-        row.hidden = true;
+        emptyEl.hidden = true;
+        countEl.textContent =
+          visible === total
+            ? `Showing all ${total} currencies`
+            : `${visible} of ${total} currencies`;
       }
     }
 
-    if (visible === 0) {
-      emptyEl.hidden = false;
-      countEl.textContent = 'No results';
-    } else {
-      emptyEl.hidden = true;
-      countEl.textContent =
-        visible === total ? `Showing all ${total} currencies` : `${visible} of ${total} currencies`;
-    }
+    searchEl.addEventListener('input', () => {
+      filter(searchEl.value);
+    });
   }
 
-  let debounceTimer: ReturnType<typeof setTimeout>;
-  searchEl.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => filter(searchEl.value), 120);
-  });
+  document.addEventListener('astro:page-load', setup);
 </script>
 
 <style>

@@ -47,8 +47,9 @@ Direction is auto-detected from the input."
 </div>
 
 <script>
-  import { convert, detectDirection } from '../../lib/yamlJson';
+  import { detectDirection } from '../../lib/yamlJson';
   import type { Direction } from '../../lib/yamlJson';
+  import { getDebounceMs } from '../../lib/worker-utils';
 
   const inputEl = document.getElementById('yj-input') as HTMLTextAreaElement;
   const outputEl = document.getElementById('yj-output') as HTMLDivElement;
@@ -61,48 +62,33 @@ Direction is auto-detected from the input."
 
   let currentOutput = '';
   let manualDirection: Direction | null = null;
+  let currentRequestId: string | null = null;
 
-  function escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  // ── Worker setup ──────────────────────────────────────────────────────────────
+  const worker = new Worker(new URL('../../workers/yaml-json.worker.ts', import.meta.url), {
+    type: 'module',
+  });
 
-  function highlightJson(json: string): string {
-    return json.replace(
-      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
-      (match) => {
-        if (/^"/.test(match)) {
-          if (/:$/.test(match)) return `<span class="yj-key">${escapeHtml(match)}</span>`;
-          return `<span class="yj-string">${escapeHtml(match)}</span>`;
-        }
-        if (/true|false/.test(match)) return `<span class="yj-bool">${match}</span>`;
-        if (/null/.test(match)) return `<span class="yj-null">${match}</span>`;
-        return `<span class="yj-number">${match}</span>`;
-      },
-    );
-  }
+  worker.onmessage = (e: MessageEvent) => {
+    const data = e.data;
+    if (data.id !== currentRequestId) return;
 
-  function highlightYaml(yamlStr: string): string {
-    return yamlStr
-      .split('\n')
-      .map((line) => {
-        const keyMatch = line.match(/^(\s*)([\w-]+)(\s*:)(.*)/);
-        if (keyMatch) {
-          const [, indent, key, colon, rest] = keyMatch;
-          const escapedRest = escapeHtml(rest);
-          const coloredRest = escapedRest
-            .replace(/('([^']*)'|"([^"]*)")/g, '<span class="yj-string">$1</span>')
-            .replace(/\b(true|false|null)\b/g, '<span class="yj-bool">$&</span>')
-            .replace(/(?<![a-zA-Z])-?\d+(\.\d+)?/g, '<span class="yj-number">$&</span>');
-          return `${escapeHtml(indent)}<span class="yj-key">${escapeHtml(key)}${escapeHtml(colon)}</span>${coloredRest}`;
-        }
-        const listMatch = line.match(/^(\s*-\s)(.*)/);
-        if (listMatch) {
-          return `<span class="yj-dim">${escapeHtml(listMatch[1])}</span>${escapeHtml(listMatch[2])}`;
-        }
-        return escapeHtml(line);
-      })
-      .join('\n');
-  }
+    updateLabels(data.direction);
+
+    if (data.ok) {
+      currentOutput = data.output;
+      outputEl.innerHTML = `<pre class="yj-pre">${data.html}</pre>`;
+      outputEl.classList.remove('yj-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } else {
+      currentOutput = '';
+      outputEl.innerHTML = `<pre class="yj-pre yj-pre--error">${data.errorMessage.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+      outputEl.classList.add('yj-output--error');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+    }
+  };
 
   function getEffectiveDirection(): Direction {
     if (manualDirection) return manualDirection;
@@ -123,6 +109,7 @@ Direction is auto-detected from the input."
     const src = inputEl.value;
 
     if (!src.trim()) {
+      currentRequestId = null;
       currentOutput = '';
       outputEl.innerHTML = '<span class="yj-placeholder">converted output will appear here</span>';
       outputEl.classList.remove('yj-output--error');
@@ -132,51 +119,25 @@ Direction is auto-detected from the input."
       return;
     }
 
-    const dir = getEffectiveDirection();
-    updateLabels(dir);
-
-    try {
-      const result = convert(src, dir);
-      currentOutput = result;
-
-      const highlighted =
-        dir === 'yaml-to-json'
-          ? highlightJson(escapeHtml(result))
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-          : highlightYaml(result);
-
-      outputEl.innerHTML = `<pre class="yj-pre">${highlighted}</pre>`;
-      outputEl.classList.remove('yj-output--error');
-      copyBtn.disabled = false;
-      downloadBtn.disabled = false;
-    } catch (err) {
-      currentOutput = '';
-      outputEl.innerHTML = `<pre class="yj-pre yj-pre--error">${escapeHtml((err as Error).message)}</pre>`;
-      outputEl.classList.add('yj-output--error');
-      copyBtn.disabled = true;
-      downloadBtn.disabled = true;
-    }
+    const id = crypto.randomUUID();
+    currentRequestId = id;
+    worker.postMessage({ id, src, manualDirection });
   }
 
   let debounceTimer: ReturnType<typeof setTimeout>;
   inputEl.addEventListener('input', () => {
     manualDirection = null;
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(process, 200);
+    debounceTimer = setTimeout(process, getDebounceMs(inputEl.value.length));
   });
 
   swapBtn.addEventListener('click', () => {
     if (currentOutput) {
-      // Capture direction before mutating the input, so auto-detection
-      // still sees the original content rather than the swapped content.
       const current = getEffectiveDirection();
       inputEl.value = currentOutput;
       manualDirection = current === 'yaml-to-json' ? 'json-to-yaml' : 'yaml-to-json';
       process();
     } else {
-      // Just flip the direction for the next input
       const current = getEffectiveDirection();
       manualDirection = current === 'yaml-to-json' ? 'json-to-yaml' : 'yaml-to-json';
       updateLabels(manualDirection);
@@ -307,7 +268,7 @@ Direction is auto-detected from the input."
     background: var(--yj-error-bg);
   }
 
-  .yj-placeholder {
+  :global(.yj-placeholder) {
     display: block;
     padding: 0.75rem 1rem;
     color: var(--fg-dim);

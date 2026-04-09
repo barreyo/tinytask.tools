@@ -21,6 +21,11 @@ export default defineConfig({
 
   vite: {
     plugins: [tailwindcss()],
+    optimizeDeps: {
+      // Pre-bundle heavy deps so Vite doesn't compile them on the first page hit
+      // (which would cause e2e test timeouts when the module cache is cold).
+      include: ['gifenc', 'papaparse', 'qr-code-styling'],
+    },
     build: {
       // Inline small assets to reduce requests
       assetsInlineLimit: 4096,

@@ -58,7 +58,8 @@
 </div>
 
 <script>
-  import { formatXml, highlightXml, escapeHtml } from '../../lib/xml-formatter';
+  import { formatXml, escapeHtml } from '../../lib/xml-formatter';
+  import { getDebounceMs } from '../../lib/worker-utils';
 
   // ── Element refs ─────────────────────────────────────────────────────────────
   const inputEl = document.getElementById('xf-input') as HTMLTextAreaElement;
@@ -71,29 +72,53 @@
 
   // ── State ────────────────────────────────────────────────────────────────────
   let formattedXml = '';
+  let currentRequestId: string | null = null;
+
+  // ── Worker setup (handles highlight + line rendering only) ───────────────────
+  const worker = new Worker(new URL('../../workers/xml-formatter.worker.ts', import.meta.url), {
+    type: 'module',
+  });
+
+  worker.onmessage = (e: MessageEvent) => {
+    const data = e.data;
+    if (data.id !== currentRequestId) return;
+
+    if (data.ok) {
+      outputEl.innerHTML = data.html;
+      outputEl.classList.remove('xf-output--error');
+      // Buttons were already enabled synchronously in process(); nothing more to do.
+    } else {
+      outputEl.innerHTML = data.errorHtml;
+      outputEl.classList.add('xf-output--error');
+    }
+  };
 
   // ── Main format function ─────────────────────────────────────────────────────
+  // DOMParser must run on the main thread; highlighting is offloaded to the worker.
   function process() {
     const src = inputEl.value;
 
     if (!src.trim()) {
+      currentRequestId = null;
       formattedXml = '';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       outputEl.innerHTML = '<span class="xf-placeholder">formatted output will appear here</span>';
+      outputEl.classList.remove('xf-output--error');
       return;
     }
 
     const result = formatXml(src);
 
     if (result.error) {
+      currentRequestId = null;
       formattedXml = '';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
 
       const { message, line, col } = result.error;
       const srcLines = src.split('\n');
-      const errLine = line != null ? line - 1 : null; // 0-indexed
+      const errLine = line != null ? line - 1 : null;
 
       if (errLine !== null && errLine >= 0 && errLine < srcLines.length) {
         const rows: string[] = srcLines.map((rawLine, i) => {
@@ -122,32 +147,29 @@
       outputEl.classList.add('xf-output--error');
 
       const errorLineEl = outputEl.querySelector('.xf-line--error');
-      if (errorLineEl) {
-        errorLineEl.scrollIntoView({ block: 'nearest' });
-      }
+      if (errorLineEl) errorLineEl.scrollIntoView({ block: 'nearest' });
     } else {
       formattedXml = result.formatted;
-      const highlighted = highlightXml(formattedXml);
 
-      // Build line-numbered output
-      const lines = highlighted.split('\n');
-      const rows = lines.map((line, i) => {
-        const lineNum = `<span class="xf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
-        return `<div>${lineNum}<span class="xf-lc">${line || '\u00a0'}</span></div>`;
-      });
-
-      outputEl.innerHTML = `<pre class="xf-pre">${rows.join('')}</pre>`;
-      outputEl.classList.remove('xf-output--error');
+      // Enable copy/download immediately — the formatted text is available now.
       copyBtn.disabled = false;
       downloadBtn.disabled = false;
+      outputEl.classList.remove('xf-output--error');
+      // Show a basic formatted view right away so the user isn't waiting.
+      outputEl.innerHTML = `<pre class="xf-pre"><div><span class="xf-lc">${escapeHtml(formattedXml)}</span></div></pre>`;
+
+      // Send to the worker to replace with syntax-highlighted + line-numbered HTML.
+      const id = crypto.randomUUID();
+      currentRequestId = id;
+      worker.postMessage({ id, formatted: formattedXml });
     }
   }
 
-  // ── Debounce ─────────────────────────────────────────────────────────────────
+  // ── Adaptive debounce ────────────────────────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout>;
   function debouncedProcess() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(process, 200);
+    debounceTimer = setTimeout(process, getDebounceMs(inputEl.value.length));
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -156,12 +178,13 @@
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      inputEl.value = (e.target?.result as string) ?? '';
+    if (file.size > 500_000) {
+      outputEl.innerHTML = '<span class="xf-placeholder">reading file…</span>';
+    }
+    file.text().then((text) => {
+      inputEl.value = text;
       process();
-    };
-    reader.readAsText(file);
+    });
     fileInput.value = '';
   });
 
@@ -416,6 +439,14 @@
 
   :global(.xml-text) {
     color: var(--xml-text);
+  }
+
+  :global(.worker-truncation) {
+    padding: 0.4rem 1rem 0.4rem 4.25rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    border-top: 1px solid var(--border);
   }
 
   /* ── Mobile: stack panes vertically ─────────────────────────────────────── */

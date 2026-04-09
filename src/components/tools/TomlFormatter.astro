@@ -58,15 +58,7 @@
 </div>
 
 <script>
-  import { formatToml, highlightToml } from '../../lib/toml';
-
-  function escapeHtml(s: string): string {
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
+  import { getDebounceMs } from '../../lib/worker-utils';
 
   // ── Element refs ─────────────────────────────────────────────────────────────
   const inputEl = document.getElementById('tf-input') as HTMLTextAreaElement;
@@ -79,79 +71,59 @@
 
   // ── State ────────────────────────────────────────────────────────────────────
   let formattedToml = '';
+  let currentRequestId: string | null = null;
+
+  // ── Worker setup ─────────────────────────────────────────────────────────────
+  const worker = new Worker(new URL('../../workers/toml-formatter.worker.ts', import.meta.url), {
+    type: 'module',
+  });
+
+  worker.onmessage = (e: MessageEvent) => {
+    const data = e.data;
+    if (data.id !== currentRequestId) return;
+
+    if (data.ok) {
+      formattedToml = data.formatted;
+      outputEl.innerHTML = data.html;
+      outputEl.classList.remove('tf-output--error');
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    } else {
+      formattedToml = '';
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
+      outputEl.innerHTML = data.errorHtml;
+      outputEl.classList.add('tf-output--error');
+
+      const errorLineEl = outputEl.querySelector('.tf-line--error');
+      errorLineEl?.scrollIntoView({ block: 'nearest' });
+    }
+  };
 
   // ── Main format function ─────────────────────────────────────────────────────
   function process() {
     const src = inputEl.value;
 
     if (!src.trim()) {
+      currentRequestId = null;
       formattedToml = '';
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       outputEl.innerHTML = '<span class="tf-placeholder">formatted output will appear here</span>';
+      outputEl.classList.remove('tf-output--error');
       return;
     }
 
-    try {
-      formattedToml = formatToml(src);
-      const highlighted = highlightToml(formattedToml);
-
-      const lines = highlighted.split('\n');
-      const rows = lines.map((line, i) => {
-        const lineNum = `<span class="tf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
-        return `<div>${lineNum}<span class="tf-lc">${line || '\u00a0'}</span></div>`;
-      });
-
-      outputEl.innerHTML = `<pre class="tf-pre">${rows.join('')}</pre>`;
-      outputEl.classList.remove('tf-output--error');
-      copyBtn.disabled = false;
-      downloadBtn.disabled = false;
-    } catch (err) {
-      formattedToml = '';
-      copyBtn.disabled = true;
-      downloadBtn.disabled = true;
-
-      const message = (err as Error).message ?? 'Unknown parse error';
-
-      // smol-toml error messages include line/col: "Parse error on line N, col M: ..."
-      const lineColMatch = message.match(/line\s+(\d+)/i);
-      const errLineNum = lineColMatch ? parseInt(lineColMatch[1], 10) - 1 : null;
-
-      const srcLines = src.split('\n');
-
-      if (errLineNum !== null && errLineNum >= 0 && errLineNum < srcLines.length) {
-        const rows: string[] = srcLines.map((rawLine, i) => {
-          const isError = i === errLineNum;
-          const rowClass = isError ? ' class="tf-line--error"' : '';
-          const lineNum = `<span class="tf-ln" aria-hidden="true">${String(i + 1).padStart(4, '\u00a0')}</span>`;
-          const lineContent = `<span class="tf-lc">${escapeHtml(rawLine) || '\u00a0'}</span>`;
-          let row = `<div${rowClass}>${lineNum}${lineContent}</div>`;
-
-          if (isError) {
-            const caretRow = `<div class="tf-line--caret"><span class="tf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="tf-lc"><span class="tf-caret">^</span></span></div>`;
-            const msgRow = `<div class="tf-line--msg"><span class="tf-ln" aria-hidden="true">${'\u00a0'.repeat(4)}</span><span class="tf-lc tf-error-msg">${escapeHtml(message)}</span></div>`;
-            row += caretRow + msgRow;
-          }
-
-          return row;
-        });
-
-        outputEl.innerHTML = `<pre class="tf-pre">${rows.join('')}</pre>`;
-        const errorLineEl = outputEl.querySelector('.tf-line--error');
-        errorLineEl?.scrollIntoView({ block: 'nearest' });
-      } else {
-        outputEl.innerHTML = `<pre class="tf-pre"><div class="tf-line--msg"><span class="tf-lc tf-error-msg">${escapeHtml(message)}</span></div></pre>`;
-      }
-
-      outputEl.classList.add('tf-output--error');
-    }
+    const id = crypto.randomUUID();
+    currentRequestId = id;
+    worker.postMessage({ id, src });
   }
 
-  // ── Debounce ─────────────────────────────────────────────────────────────────
+  // ── Adaptive debounce ────────────────────────────────────────────────────────
   let debounceTimer: ReturnType<typeof setTimeout>;
   function debouncedProcess() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(process, 200);
+    debounceTimer = setTimeout(process, getDebounceMs(inputEl.value.length));
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -160,12 +132,13 @@
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      inputEl.value = (e.target?.result as string) ?? '';
+    if (file.size > 500_000) {
+      outputEl.innerHTML = '<span class="tf-placeholder">reading file…</span>';
+    }
+    file.text().then((text) => {
+      inputEl.value = text;
       process();
-    };
-    reader.readAsText(file);
+    });
     fileInput.value = '';
   });
 
@@ -414,6 +387,14 @@
   :global(.toml-comment) {
     color: var(--toml-comment);
     font-style: italic;
+  }
+
+  :global(.worker-truncation) {
+    padding: 0.4rem 1rem 0.4rem 4.25rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    border-top: 1px solid var(--border);
   }
 
   /* ── Mobile ──────────────────────────────────────────────────────────────── */

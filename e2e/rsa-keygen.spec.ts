@@ -115,13 +115,13 @@ test('can switch usage to signing', async ({ page }) => {
 
 test('generates new different keys on repeated clicks', async ({ page }) => {
   await page.goto(URL);
+  await page.locator('#generate-btn[data-initialized="true"]').waitFor({ timeout: 5000 });
   await page.locator('#generate-btn').click();
   await expect(page.locator('#public-key-section')).toBeVisible({ timeout: 15000 });
   const first = await page.locator('#public-key-output').inputValue();
 
   await page.locator('#generate-btn').click();
-  // Wait for new key
-  await page.waitForTimeout(2000);
+  await expect(page.locator('#public-key-section')).toBeVisible({ timeout: 15000 });
   const second = await page.locator('#public-key-output').inputValue();
   expect(first).not.toBe(second);
 });

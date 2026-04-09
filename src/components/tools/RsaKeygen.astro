@@ -176,6 +176,8 @@
   downloadPrivateBtn.addEventListener('click', () =>
     downloadPem(privateKeyOutput.value, 'private.pem'),
   );
+
+  generateBtn.dataset.initialized = 'true';
 </script>
 
 <style>

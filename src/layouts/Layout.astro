@@ -80,6 +80,12 @@ const ogImage = image ? new URL(image, SITE_URL).href : new URL('/og-default.png
     <meta name="theme-color" content="#0a0a0a" />
 
     <ClientRouter />
+
+    <script is:inline>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+    </script>
   </head>
   <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
