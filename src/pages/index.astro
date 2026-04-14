@@ -598,12 +598,6 @@ const itemListSchema = {
     color: var(--accent, var(--fg));
   }
 
-  @media (hover: none) and (pointer: coarse) {
-    .keybindings {
-      display: none;
-    }
-  }
-
   .keybindings {
     list-style: none;
     margin: 0;
@@ -612,6 +606,12 @@ const itemListSchema = {
     gap: 1rem;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .keybindings {
+      display: none;
+    }
   }
 
   .keybindings li {
