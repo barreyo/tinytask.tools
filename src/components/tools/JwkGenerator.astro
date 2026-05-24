@@ -129,7 +129,7 @@
 </div>
 
 <script>
-  import { generateJwk, pemToJwk } from '../../lib/jwk-generator';
+  import { computeThumbprint, generateJwk, pemToJwk } from '../../lib/jwk-generator';
   import type {
     JwkAlgorithm,
     KeyUsageMode,
@@ -285,7 +285,6 @@
       const jwk = await pemToJwk(pem, type);
 
       if (type === 'public') {
-        const { computeThumbprint } = await import('../../lib/jwk-generator');
         const thumbprint = await computeThumbprint(jwk);
         (jwk as Record<string, unknown>).kid = thumbprint;
         displayKeyPair(jwk, null, thumbprint);
