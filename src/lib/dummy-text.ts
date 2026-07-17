@@ -1,12 +1,5 @@
 export type Theme =
-  | 'lorem'
-  | 'fintech'
-  | 'startup'
-  | 'corporate'
-  | 'developer'
-  | 'design'
-  | 'legal'
-  | 'hipster';
+  'lorem' | 'fintech' | 'startup' | 'corporate' | 'developer' | 'design' | 'legal' | 'hipster';
 
 export type Format = 'paragraphs' | 'sentences' | 'words' | 'headlines';
 

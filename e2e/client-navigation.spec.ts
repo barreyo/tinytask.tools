@@ -15,6 +15,13 @@ function expectHomePath(page: Page) {
   return expect(page).toHaveURL((url: URL) => url.pathname === '/');
 }
 
+/** View transitions set data-astro-transition on <html> and block pointer events until done. */
+async function waitForAstroIdle(page: Page) {
+  await page.waitForFunction(
+    () => !document.documentElement.hasAttribute('data-astro-transition'),
+  );
+}
+
 test.describe('Astro client router (regression)', () => {
   test.beforeEach(({ page }) => {
     failOnPageError(page);
@@ -59,6 +66,7 @@ test.describe('Astro client router (regression)', () => {
 
     await page.locator('a.back-link').click();
     await expectHomePath(page);
+    await waitForAstroIdle(page);
 
     await page.locator('a.tool-card[href="/tools/url-encoder"]').click();
     await expect(page).toHaveURL(/\/tools\/url-encoder\/?$/);
@@ -72,6 +80,7 @@ test.describe('Astro client router (regression)', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#search-panel')).toHaveAttribute('aria-hidden', 'true');
+    await waitForAstroIdle(page);
 
     await page.locator('a.tool-card[href="/tools/crontab"]').click();
     await expect(page).toHaveURL(/\/tools\/crontab\/?$/);
@@ -84,6 +93,7 @@ test.describe('Astro client router (regression)', () => {
 
     await page.locator('a.back-link').click();
     await expect(page.locator('.tool-grid')).toBeVisible();
+    await waitForAstroIdle(page);
 
     await page.locator('a.tool-card[href="/tools/json-formatter"]').click();
     await expect(page).toHaveURL(/\/tools\/json-formatter\/?$/);

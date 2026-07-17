@@ -5,8 +5,7 @@ export interface XmlError {
 }
 
 export type FormatResult =
-  | { formatted: string; error: null }
-  | { formatted: null; error: XmlError };
+  { formatted: string; error: null } | { formatted: null; error: XmlError };
 
 // ── HTML escaping ─────────────────────────────────────────────────────────────
 
