@@ -17,9 +17,7 @@ function expectHomePath(page: Page) {
 
 /** View transitions set data-astro-transition on <html> and block pointer events until done. */
 async function waitForAstroIdle(page: Page) {
-  await page.waitForFunction(
-    () => !document.documentElement.hasAttribute('data-astro-transition'),
-  );
+  await page.waitForFunction(() => !document.documentElement.hasAttribute('data-astro-transition'));
 }
 
 test.describe('Astro client router (regression)', () => {
